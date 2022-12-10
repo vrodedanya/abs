@@ -113,9 +113,8 @@ fn create_map_dependecy_sources(pathes: &Vec<File>, search_list: &Vec<String>) -
 
 fn get_modified(files: &Vec<File>) -> Vec<File> {
     let mut files = files.clone();
-    let f = std::fs::File::open(".abs_frozen");
+    let f = std::fs::File::open(".abs/frozen");
     if f.is_err() {
-        std::fs::File::create(".abs_frozen").expect("Create .abs_frozen");
         return files;
     }
     let f = f.unwrap();
@@ -149,7 +148,11 @@ fn get_modified(files: &Vec<File>) -> Vec<File> {
 }
 
 fn freeze(files: &Vec<File>) {
-    let f = std::fs::File::create(".abs_frozen").expect("Unable to create file");
+    if !std::path::Path::new(".abs/").exists() {
+        std::fs::DirBuilder::new()
+        .create(".abs/").unwrap();
+    }
+    let f = std::fs::File::create(".abs/frozen").expect("Unable to create file");
     let mut f = std::io::BufWriter::new(f);
     for file in files {
         let row = format!("{} {}\n", file.name, datetime_to_string(file.last_modification));
