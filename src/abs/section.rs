@@ -287,4 +287,14 @@ impl Section {
             .spawn().unwrap();
         return is_successful;
     }
+
+    pub fn run(&self) -> bool{
+        if !self.build() {
+            return false;
+        }
+        println!("Program:");
+        let mut child = std::process::Command::new(format!(".abs/{}/{}", self.name, self.name))
+            .spawn().unwrap();
+        return true;
+    }
 }

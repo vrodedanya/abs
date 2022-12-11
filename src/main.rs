@@ -16,38 +16,44 @@ fn cli() -> Command {
         )
         .subcommand(
             Command::new("check")
-                .about("Check that the current section can be built")
+                .about("Checks that the current section can be built")
         )
         .subcommand(
             Command::new("build")
-                .about("Build the current section")
+                .about("Builds the current section")
+        )
+        .subcommand(
+            Command::new("run")
+                .about("Builds and runs")
         )
 }
 
 fn main() {
     let matches = cli().get_matches();
     let tank = Tank::new("abs.toml").unwrap();
+    let mut result = false;
     match matches.subcommand() {
         Some(("files", _)) => {
             tank.print_sections();
         },
         Some(("check", _)) => {
-            if tank.check() {
-                std::process::exit(0)
-            } else {
-                std::process::exit(1)
-            }
+            result = tank.check();
         },
         Some(("build", _)) => {
-            if tank.build() {
-                std::process::exit(0)
-            } else {
-                std::process::exit(1)
-            }
+            result = tank.build();
+        },
+        Some(("run", _)) => {
+            result = tank.run();
         },
         None => {
             println!("Unexpected command")
         },
         _ => unreachable!()
+    }
+
+    if result {
+        std::process::exit(0);
+    } else {
+        std::process::exit(1);
     }
 }
