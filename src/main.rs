@@ -2,7 +2,7 @@ mod abs;
 
 use abs::prelude::*;
 
-use clap::{Command, arg};
+use clap::Command;
 
 fn cli() -> Command {
     Command::new("abs")
@@ -16,7 +16,11 @@ fn cli() -> Command {
         )
         .subcommand(
             Command::new("check")
-                .about("Check that the section can be built")
+                .about("Check that the current section can be built")
+        )
+        .subcommand(
+            Command::new("build")
+                .about("Build the current section")
         )
 }
 
@@ -29,6 +33,13 @@ fn main() {
         },
         Some(("check", _)) => {
             if tank.check() {
+                std::process::exit(0)
+            } else {
+                std::process::exit(1)
+            }
+        },
+        Some(("build", _)) => {
+            if tank.build() {
                 std::process::exit(0)
             } else {
                 std::process::exit(1)

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, env};
 use chrono::NaiveDateTime;
 use super::file::File;
 
@@ -208,10 +208,10 @@ impl Section {
 impl Section {
     pub fn check(&self) -> bool {
         let mut is_successful = true;
-        let mut checked: Vec<String> = vec![];
+        let mut built: Vec<String> = vec![];
         for (dep, srcs) in &self.deps_src {
             for src in srcs.iter() {
-                if checked.contains(&src.path()) || src.path().ends_with(".hpp") || src.path().ends_with(".h") {
+                if built.contains(&src.path()) || src.path().ends_with(".hpp") || src.path().ends_with(".h") {
                     continue;
                 }
                 let args = self.include_directories.iter().map(|str|format!("-I{}", str));
@@ -231,13 +231,60 @@ impl Section {
                     },
                     Err(_) => println!("Failed: {}", src.path()),
                 }
-                checked.push(src.path());
+                built.push(src.path());
             }
         }
         return is_successful;
     }
 
-    pub fn build(&self) {
+    pub fn build(&self) -> bool{
+        let mut is_successful = true;
+        let mut built: Vec<String> = vec![];
+        let mut objects: Vec<String> = vec![];
 
+        // todo add building based on dependency changing
+        for (dep, srcs) in &self.deps_src {
+            for src in srcs.iter() {
+                if built.contains(&src.path()) || src.path().ends_with(".hpp") || src.path().ends_with(".h") {
+                    continue;
+                }
+                let args = self.include_directories.iter().map(|str|format!("-I{}", str));
+                let file_name = std::path::Path::new(&src.path()).file_name().unwrap()
+                    .to_str().unwrap().to_string();
+                let without_extension = file_name.strip_suffix(".cpp").or_else(||file_name.strip_suffix(".c"))
+                    .expect("Expected cpp or c file");
+
+                let output_name = format!(".abs/{}/{}{}", self.name, without_extension, ".o");
+
+                let mut child = std::process::Command::new("g++")
+                    .arg("-c")
+                    .args(args)
+                    .arg(&src.path())
+                    .arg("-o")
+                    .arg(&output_name)
+                    .spawn().unwrap();
+
+                objects.push(output_name);
+
+                match child.wait() {
+                    Ok(exit_status) => {
+                        if exit_status.success() {
+                            println!("Complete: {}", src.path());
+                        } else {
+                            println!("Failed: {}", src.path());
+                            is_successful = false;
+                        }
+                    },
+                    Err(_) => println!("Failed: {}", src.path()),
+                }
+                built.push(src.path());
+            }
+        }
+        let mut child = std::process::Command::new("g++")
+            .args(objects)
+            .arg("-o")
+            .arg(format!(".abs/{}/{}", self.name, self.name))
+            .spawn().unwrap();
+        return is_successful;
     }
 }

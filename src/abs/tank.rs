@@ -61,6 +61,10 @@ impl Tank {
         self.sections.iter().all(|section|section.check())
     }
 
+    pub fn build(&self) -> bool {
+        self.sections.iter().all(|section|section.build())
+    }
+
     pub fn print_sections(&self) {
         for section in &self.sections {
             println!("{:#?}\n", section);
