@@ -203,3 +203,41 @@ impl Section {
     }
 
 }
+
+#[allow(unused)]
+impl Section {
+    pub fn check(&self) -> bool {
+        let mut is_successful = true;
+        let mut checked: Vec<String> = vec![];
+        for (dep, srcs) in &self.deps_src {
+            for src in srcs.iter() {
+                if checked.contains(&src.path()) || src.path().ends_with(".hpp") || src.path().ends_with(".h") {
+                    continue;
+                }
+                let args = self.include_directories.iter().map(|str|format!("-I{}", str));
+                let mut child = std::process::Command::new("g++")
+                    .arg("-fsyntax-only")
+                    .args(args)
+                    .arg(&src.path())
+                    .spawn().unwrap();
+                match child.wait() {
+                    Ok(exit_status) => {
+                        if exit_status.success() {
+                            println!("Complete: {}", src.path());
+                        } else {
+                            println!("Failed: {}", src.path());
+                            is_successful = false;
+                        }
+                    },
+                    Err(_) => println!("Failed: {}", src.path()),
+                }
+                checked.push(src.path());
+            }
+        }
+        return is_successful;
+    }
+
+    pub fn build(&self) {
+
+    }
+}

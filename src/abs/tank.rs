@@ -57,6 +57,10 @@ impl Tank {
         return Ok(tank);
     }
 
+    pub fn check(&self) -> bool {
+        self.sections.iter().all(|section|section.check())
+    }
+
     pub fn print_sections(&self) {
         for section in &self.sections {
             println!("{:#?}\n", section);
