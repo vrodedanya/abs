@@ -1,7 +1,0 @@
-[tank]
-name = "testing_toml"
-version = "1.2.0"
-
-[sections.main]
-source = "source"
-include = "include"
