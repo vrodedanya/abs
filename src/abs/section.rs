@@ -1,10 +1,9 @@
-use std::{collections::HashMap, env};
+use std::collections::HashMap;
 use chrono::NaiveDateTime;
 use super::file::File;
 
 #[derive(Debug)]
 pub enum SectionError {
-    FailedToCreateSectionDirectory(String),
     MandatoryLack(String),
     FieldTypeError(String),
 }
@@ -22,14 +21,7 @@ pub struct Section {
 #[allow(unused)]
 impl Section {
     pub fn new(name: String, config: &toml::Value) -> Result<Section, SectionError> {
-        if !std::path::Path::new(".abs/").exists() {
-            std::fs::DirBuilder::new()
-                .create(".abs/");
-        }
-        if !std::path::Path::new(&format!(".abs/{name}")).exists() {
-            std::fs::DirBuilder::new()
-            .create(format!(".abs/{name}")).map_err(|err|SectionError::FailedToCreateSectionDirectory(err.to_string()))?;
-        }
+        std::fs::create_dir_all(format!(".abs/{}", name));
 
         let mut section_files: Vec<File> = vec![];
 
@@ -153,53 +145,34 @@ impl Section {
         return map;
     }
 
-    fn get_modified(files: &Vec<File>) -> Vec<File> {
+    fn get_modified(&self, files: &Vec<File>) -> Vec<File> {
         let mut files = files.clone();
-        let f = std::fs::File::open(".abs/frozen");
-        if f.is_err() {
-            return files;
-        }
-        let f = f.unwrap();
-
-        let f = std::io::BufReader::new(f);
-
-        let mut modified: Vec<File> = std::io::BufRead::lines(f).filter_map(|s| {
-            let line = s.unwrap();
-            let strings: Vec<&str> = line.split_whitespace().collect();
-            let path = strings[0];
-            let time = NaiveDateTime::parse_from_str(strings[1], "%Y-%m-%d/%T").unwrap().into();
-            let mut changed: Option<File> = None;
-            files.retain(|file| {
-                if path == file.path(){
-                    if file.is_modified(time) {
-                        changed = Some(file.to_owned());
-                    }
-                    return false;
-                } else {
-                    return true;
-                } 
-            });
-            if changed.is_some() {
-                changed
-            } else {
-                None
+        files.retain(|file| {
+            let f = std::fs::File::open(format!(".abs/{}/frozen/{}", self.name, file.path().replace("/", "|")));
+            if f.is_err() {
+                return true;
             }
-        }).collect();
-        modified.append(&mut files);
-        return modified;
+            let f = f.unwrap();
+            let mut f = std::io::BufReader::new(f);
+            let mut content = String::new();
+            let res = std::io::BufRead::read_line(&mut f, &mut content).expect("expect string in the file");
+
+            let time = NaiveDateTime::parse_from_str(&content, "%Y-%m-%d/%T").unwrap().into();
+            if file.is_modified(time) {
+                return true;
+            } else {
+                return false;
+            }
+        });
+        return files;
     }
 
-    fn freeze(files: &Vec<File>) {
-        if !std::path::Path::new(".abs/").exists() {
-            std::fs::DirBuilder::new()
-            .create(".abs/").unwrap();
-        }
-        let f = std::fs::File::create(".abs/frozen").expect("Unable to create file");
+    fn freeze(&self, file: &File) {
+        std::fs::create_dir_all(format!(".abs/{}/frozen/", self.name));
+        let f = std::fs::File::create(format!(".abs/{}/frozen/{}", self.name, file.path().replace("/", r"|")))
+            .expect("Unable to create file");
         let mut f = std::io::BufWriter::new(f);
-        for file in files {
-            let row = format!("{} {}\n", file.path(), file.modification_time_to_string());
-            std::io::Write::write(&mut f, row.as_bytes()).expect("writted");
-        }
+        std::io::Write::write(&mut f, file.modification_time_to_string().as_bytes()).expect("writted");
     }
 
 }
@@ -237,10 +210,15 @@ impl Section {
         return is_successful;
     }
 
-    pub fn build(&self) -> bool{
+    pub fn build(&self) -> bool {
+        std::fs::create_dir_all(format!(".abs/{}/binary/", self.name));
+
         let mut is_successful = true;
         let mut built: Vec<String> = vec![];
         let mut objects: Vec<String> = vec![];
+
+        let modified = self.get_modified(&self.deps_src.keys().cloned().collect());
+        println!("{:#?}", modified);
 
         // todo add building based on dependency changing
         for (dep, srcs) in &self.deps_src {
@@ -254,7 +232,7 @@ impl Section {
                 let without_extension = file_name.strip_suffix(".cpp").or_else(||file_name.strip_suffix(".c"))
                     .expect("Expected cpp or c file");
 
-                let output_name = format!(".abs/{}/{}{}", self.name, without_extension, ".o");
+                let output_name = format!(".abs/{}/binary/{}{}", self.name, without_extension, ".o");
 
                 let mut child = std::process::Command::new("g++")
                     .arg("-c")
@@ -270,6 +248,7 @@ impl Section {
                     Ok(exit_status) => {
                         if exit_status.success() {
                             println!("Complete: {}", src.path());
+                            self.freeze(src);
                         } else {
                             println!("Failed: {}", src.path());
                             is_successful = false;
@@ -279,11 +258,17 @@ impl Section {
                 }
                 built.push(src.path());
             }
+            self.freeze(dep);
         }
+        if !is_successful {
+            return false;
+        }
+
+        // linking
         let mut child = std::process::Command::new("g++")
             .args(objects)
             .arg("-o")
-            .arg(format!(".abs/{}/{}", self.name, self.name))
+            .arg(format!(".abs/{}/binary/{}", self.name, self.name))
             .spawn().unwrap();
         return is_successful;
     }
@@ -293,7 +278,7 @@ impl Section {
             return false;
         }
         println!("Program:");
-        let mut child = std::process::Command::new(format!(".abs/{}/{}", self.name, self.name))
+        let mut child = std::process::Command::new(format!(".abs/{}/binary/{}", self.name, self.name))
             .spawn().unwrap();
         return true;
     }
