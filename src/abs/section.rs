@@ -68,7 +68,7 @@ impl Section {
             if meta.is_dir() {
                 vec_of_pathes.append(&mut Section::collect_files(full_path, suffixes));
             } else if suffixes.iter().any(|&suffix|full_path.ends_with(suffix)) {
-                vec_of_pathes.push(File::from_system_time(full_path.to_owned(), meta.modified().unwrap()));
+                vec_of_pathes.push(File::from_path(full_path.to_owned()).unwrap());
             }
         }
         return vec_of_pathes;
@@ -125,7 +125,9 @@ impl Section {
     fn create_map_source_dependencies(pathes: &Vec<File>, search_list: &Vec<String>) -> HashMap<File, Vec<File>> {
         let mut map: HashMap<File, Vec<File>> = HashMap::new();
         for path in pathes {
-            map.insert(path.to_owned(), Section::collect_local_dependencies_for_file(&path.path(), &search_list).into_iter().chain(vec![path.to_owned()].into_iter()).collect());
+            map.insert(path.to_owned(), 
+                Section::collect_local_dependencies_for_file(&path.path(), &search_list)
+                    .into_iter().chain(vec![path.to_owned()].into_iter()).collect());
         }
         return map;
     }
@@ -210,6 +212,39 @@ impl Section {
         return is_successful;
     }
 
+    pub fn link(&self) -> bool {
+        let objects: Vec<String> = std::fs::read_dir(format!(".abs/{}/binary/", self.name)).unwrap()
+            .filter(|file|{
+            let file = file.as_ref().unwrap();
+            return file.file_name().to_str().unwrap().ends_with(".o");
+        }).map(|file|{
+            let file = file.unwrap();
+            return file.path().canonicalize().unwrap().to_str().unwrap().to_string();
+        }).collect();
+        // linking
+        let mut child = std::process::Command::new("g++")
+            .args(objects)
+            .arg("-o")
+            .arg(format!(".abs/{}/binary/{}", self.name, self.name))
+            .spawn().unwrap();
+
+        match child.wait() {
+            Ok(exit_status) => {
+                if exit_status.success() {
+                    println!("Linking complete");
+                } else {
+                    println!("Linking failed");
+                    return false;
+                }
+            },
+            Err(_) => {
+                println!("Linking failed");
+                return false;
+            },
+        }
+        return true;
+    }
+
     pub fn build(&self) -> bool {
         std::fs::create_dir_all(format!(".abs/{}/binary/", self.name));
 
@@ -217,18 +252,33 @@ impl Section {
         let mut built: Vec<String> = vec![];
         let mut objects: Vec<String> = vec![];
 
-        let modified = self.get_modified(&self.deps_src.keys().cloned().collect());
+        let mut modified = self.get_modified(&self.deps_src.keys().cloned().collect());
         println!("{:#?}", modified);
 
-        // todo add building based on dependency changing
-        for (dep, srcs) in &self.deps_src {
-            for src in srcs.iter() {
-                if built.contains(&src.path()) || src.path().ends_with(".hpp") || src.path().ends_with(".h") {
+        self.files.iter().for_each(|file|{
+            if file.path().ends_with(".cpp") || file.path().ends_with(".c") {
+                let temp = file.path().replace("/", "|");
+                let name = &format!(".abs/{}/binary/{}.o", self.name, temp
+                .strip_suffix(".cpp")
+                .or_else(||temp.strip_suffix(".c")).unwrap());
+                if !std::path::Path::new(name).exists() {
+                    modified.push(file.clone());
+                }
+            }
+        });
+
+        if modified.is_empty() && std::path::Path::new(&format!(".abs/{}/binary/{}", self.name, self.name)).exists() {
+            println!("Nothing to do");
+            return true;
+        }
+
+        for modified_file in &modified {
+            for for_build in &self.deps_src[modified_file] {
+                if built.contains(&for_build.path()) || for_build.path().ends_with(".hpp") || for_build.path().ends_with(".h") {
                     continue;
                 }
                 let args = self.include_directories.iter().map(|str|format!("-I{}", str));
-                let file_name = std::path::Path::new(&src.path()).file_name().unwrap()
-                    .to_str().unwrap().to_string();
+                let file_name = for_build.path().replace("/", "|");
                 let without_extension = file_name.strip_suffix(".cpp").or_else(||file_name.strip_suffix(".c"))
                     .expect("Expected cpp or c file");
 
@@ -237,40 +287,30 @@ impl Section {
                 let mut child = std::process::Command::new("g++")
                     .arg("-c")
                     .args(args)
-                    .arg(&src.path())
+                    .arg(&for_build.path())
                     .arg("-o")
                     .arg(&output_name)
                     .spawn().unwrap();
 
-                objects.push(output_name);
-
                 match child.wait() {
                     Ok(exit_status) => {
                         if exit_status.success() {
-                            println!("Complete: {}", src.path());
-                            self.freeze(src);
+                            println!("Complete: {}", for_build.path());
+                            self.freeze(&for_build);
                         } else {
-                            println!("Failed: {}", src.path());
+                            println!("Failed: {}", for_build.path());
                             is_successful = false;
                         }
                     },
-                    Err(_) => println!("Failed: {}", src.path()),
+                    Err(_) => println!("Failed: {}", for_build.path()),
                 }
-                built.push(src.path());
-            }
-            self.freeze(dep);
-        }
-        if !is_successful {
-            return false;
-        }
 
-        // linking
-        let mut child = std::process::Command::new("g++")
-            .args(objects)
-            .arg("-o")
-            .arg(format!(".abs/{}/binary/{}", self.name, self.name))
-            .spawn().unwrap();
-        return is_successful;
+                objects.push(output_name);
+                built.push(for_build.path());
+            }
+            self.freeze(&modified_file);
+        }
+        return self.link();
     }
 
     pub fn run(&self) -> bool{

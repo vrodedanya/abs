@@ -20,15 +20,19 @@ impl File {
         File { path, last_modification}
     }
 
-    pub fn from_system_time(path: String, last_modification: std::time::SystemTime) -> File {
-        File {path, last_modification: chrono::DateTime::<chrono::Local>::from(last_modification).naive_local()}
+    pub fn from_system_time(path: String, last_modification: std::time::SystemTime) -> Result<File, FileError>  {
+        let binding = std::path::Path::new(&path).canonicalize()
+            .map_err(|err|FileError::FileDoesntExist("Can't get absolute path".to_string()))?;
+        let path = binding.to_str()
+            .ok_or(FileError::FileDoesntExist("Can't find file".to_string()))?;
+        Ok(File {path: path.to_string(), last_modification: chrono::DateTime::<chrono::Local>::from(last_modification).naive_local()})
     }
 
     pub fn from_path(path: String) -> Result<File, FileError> {
         let modified = std::path::Path::new(&path)
             .metadata().map_err(|err|FileError::CantGetMetaData(err.to_string()))?
             .modified().map_err(|err|FileError::ModificationTimeAnavailable(err.to_string()))?;
-        Ok(File::from_system_time(path, modified))
+        Ok(File::from_system_time(path, modified)?)
     }
 
     pub fn path(&self) -> String {
