@@ -8,4 +8,6 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.23"
 clap = { version = "4.0.29", features = ["derive"] }
+colored = "2.0.0"
+term_size = "0.3.2"
 toml = "0.5.9"

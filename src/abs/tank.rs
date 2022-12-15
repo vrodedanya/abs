@@ -41,7 +41,6 @@ impl Tank {
             let sections_config = sections_config.unwrap();
             if let toml::Value::Table(t) = sections_config {
                 for (key, value) in t {
-                    println!("{}", key);
                     sections.push(Section::new(key.to_string(), &value)
                         .map_err(|err|TankError::SectionError(format!("{:#?}", err)))?);
                 }

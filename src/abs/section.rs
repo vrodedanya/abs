@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use chrono::NaiveDateTime;
+use colored::Colorize;
 use super::file::File;
 
 #[derive(Debug)]
@@ -17,6 +18,8 @@ pub struct Section {
     deps_src: HashMap<File, Vec<File>>,
     srcs_dep: HashMap<File, Vec<File>>
 }
+
+const RESULT_BORDED_WIDTH: usize = 10;
 
 #[allow(unused)]
 impl Section {
@@ -195,6 +198,7 @@ impl Section {
                     .args(args)
                     .arg(&src.path())
                     .spawn().unwrap();
+
                 match child.wait() {
                     Ok(exit_status) => {
                         if exit_status.success() {
@@ -231,85 +235,104 @@ impl Section {
         match child.wait() {
             Ok(exit_status) => {
                 if exit_status.success() {
-                    println!("Linking complete");
+                    println!("{:>RESULT_BORDED_WIDTH$} {}", "Complete".green().bold(), "linking".cyan());
                 } else {
-                    println!("Linking failed");
+                    println!("{:>RESULT_BORDED_WIDTH$} {}", "Fail".red().bold(), "linking".cyan());
                     return false;
                 }
             },
             Err(_) => {
-                println!("Linking failed");
+                println!("{:>RESULT_BORDED_WIDTH$} {}", "Fail".red().bold(), "linking".cyan());
                 return false;
             },
         }
         return true;
     }
 
-    pub fn build(&self) -> bool {
-        std::fs::create_dir_all(format!(".abs/{}/binary/", self.name));
-
-        let mut is_successful = true;
-        let mut built: Vec<String> = vec![];
-        let mut objects: Vec<String> = vec![];
-
-        let mut modified = self.get_modified(&self.deps_src.keys().cloned().collect());
-        println!("{:#?}", modified);
-
-        self.files.iter().for_each(|file|{
+    pub fn collect_missing_objects(&self) -> Vec<File> {
+        self.files.iter().filter(|file|{
             if file.path().ends_with(".cpp") || file.path().ends_with(".c") {
                 let temp = file.path().replace("/", "|");
                 let name = &format!(".abs/{}/binary/{}.o", self.name, temp
                 .strip_suffix(".cpp")
                 .or_else(||temp.strip_suffix(".c")).unwrap());
                 if !std::path::Path::new(name).exists() {
-                    modified.push(file.clone());
+                    return true;
                 }
             }
-        });
+            return false;
+        }).map(|file|file.clone()).collect()
+    }
+
+    pub fn build(&self) -> bool {
+        std::fs::create_dir_all(format!(".abs/{}/binary/", self.name));
+
+        let mut modified = self.get_modified(&self.deps_src.keys().cloned().collect());
+        modified.append(&mut self.collect_missing_objects());
 
         if modified.is_empty() && std::path::Path::new(&format!(".abs/{}/binary/{}", self.name, self.name)).exists() {
-            println!("Nothing to do");
+            println!("{:>RESULT_BORDED_WIDTH$} {}", "Compiling".bright_green(), "nothing to compile");
             return true;
         }
+
+        let mut is_successful = true;
+
+        let mut built: Vec<String> = vec![];
+
+        let mut objects: Vec<String> = vec![];
 
         for modified_file in &modified {
             for for_build in &self.deps_src[modified_file] {
                 if built.contains(&for_build.path()) || for_build.path().ends_with(".hpp") || for_build.path().ends_with(".h") {
                     continue;
                 }
-                let args = self.include_directories.iter().map(|str|format!("-I{}", str));
+                let included_directories_argument = self.include_directories.iter().map(|str|format!("-I{}", str));
+
                 let file_name = for_build.path().replace("/", "|");
                 let without_extension = file_name.strip_suffix(".cpp").or_else(||file_name.strip_suffix(".c"))
                     .expect("Expected cpp or c file");
 
-                let output_name = format!(".abs/{}/binary/{}{}", self.name, without_extension, ".o");
+                let output_name_for_object = format!(".abs/{}/binary/{}{}", self.name, without_extension, ".o");
 
                 let mut child = std::process::Command::new("g++")
                     .arg("-c")
-                    .args(args)
+                    .args(included_directories_argument)
                     .arg(&for_build.path())
                     .arg("-o")
-                    .arg(&output_name)
+                    .arg(&output_name_for_object)
                     .spawn().unwrap();
 
                 match child.wait() {
                     Ok(exit_status) => {
+                        
                         if exit_status.success() {
-                            println!("Complete: {}", for_build.path());
+                            println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Complete".green().bold(), for_build.path());
                             self.freeze(&for_build);
                         } else {
-                            println!("Failed: {}", for_build.path());
+                            println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Fail".red().bold(), for_build.path());
                             is_successful = false;
+                            built.push(for_build.path());
+                            continue;
                         }
                     },
-                    Err(_) => println!("Failed: {}", for_build.path()),
+                    Err(_) => {
+                        println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Fail".red().bold(), file_name);
+                        is_successful = false;
+                        built.push(for_build.path());
+                    },
                 }
 
-                objects.push(output_name);
+                objects.push(output_name_for_object);
                 built.push(for_build.path());
             }
             self.freeze(&modified_file);
         }
+        if !is_successful {
+            println!("{:>RESULT_BORDED_WIDTH$} {}", "Failed".red().bold(), "compiling".cyan());
+            return false;
+        }
+        println!("{:>RESULT_BORDED_WIDTH$} {}", "Complete".green().bold(), "compiling".cyan());
+
         return self.link();
     }
 
@@ -317,7 +340,7 @@ impl Section {
         if !self.build() {
             return false;
         }
-        println!("Program:");
+        println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Running section".bright_green(), self.name);
         let mut child = std::process::Command::new(format!(".abs/{}/binary/{}", self.name, self.name))
             .spawn().unwrap();
         return true;
