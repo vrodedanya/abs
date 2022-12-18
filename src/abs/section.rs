@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Read};
+use std::{collections::HashMap, io::Read, process::Child};
 use chrono::NaiveDateTime;
 use colored::Colorize;
 use super::file::File;
@@ -273,6 +273,7 @@ impl Section {
         // linking
         let mut child = std::process::Command::new("g++")
             .args(objects)
+            .arg("-fPIC")
             .arg("-o")
             .arg(format!(".abs/{}/binary/{}", self.name, self.name))
             .spawn().unwrap();
@@ -332,75 +333,79 @@ impl Section {
             return true;
         }
 
-        let mut is_successful = true;
+        let mut built: Vec<&File> = vec![];
 
-        let mut built: Vec<String> = vec![];
+        let mut failed: Vec<File> = vec![];
 
-        let mut objects: Vec<String> = vec![];
+        let mut childs: HashMap<&File, Child> = HashMap::new();
 
-        let mut failed: Vec<&File> = vec![];
-
-        let mut successful_number = 0;
+        let mut handle_child = |child: &mut Child, file: &File| -> bool {
+            let file = file.clone();
+            match child.try_wait() {
+                Ok(result) => {
+                    if result.is_none() {
+                        return true;
+                    }
+                    let result = result.unwrap();
+                    if result.success() {
+                        println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Complete".green().bold(), file.path());
+                        self.freeze(&file);
+                    } else {
+                        println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Fail".red().bold(), file.path());
+                        failed.push(file);
+                    }
+                    return false;
+                },
+                Err(_) => return true
+            }
+        };
 
         for modified_file in &modified {
             let mut is_all_compiled = true;
             self.deps_src[modified_file].iter().for_each(|for_build|{
-                if built.contains(&for_build.path()) || for_build.path().ends_with(".hpp") || for_build.path().ends_with(".h") {
+                if built.contains(&for_build) || for_build.path().ends_with(".hpp") || for_build.path().ends_with(".h") {
                     return;
                 }
-                if for_build.path() != modified_file.path() {
-                    if match self.get_frozen_time(&for_build) {
+                if for_build.path() != modified_file.path() && match self.get_frozen_time(&for_build) { // if file was frozen after changing dependency
                         Some(for_build_frozen_time) => !modified_file.is_modified(&for_build_frozen_time),
                         None => false,
                     } {
-                        return
-                    }
+                    return
                 }
                 let included_directories_argument = self.include_directories.iter().map(|str|format!("-I{}", str));
 
-                let file_name = for_build.path().replace("/", "|");
-                let without_extension = file_name.strip_suffix(".cpp").or_else(||file_name.strip_suffix(".c"))
-                    .expect("Expected cpp or c file");
-
-                let output_name_for_object = format!(".abs/{}/binary/{}{}", self.name, without_extension, ".o");
-
-                let mut child = std::process::Command::new("g++")
+                while childs.len() >= 8 {
+                    childs.retain(|file, child|{
+                        handle_child(child, *file)
+                    });
+                }
+                childs.insert(&for_build, std::process::Command::new("g++")
                     .arg("-c")
                     .args(included_directories_argument)
                     .arg(&for_build.path())
                     .arg("-o")
-                    .arg(&output_name_for_object)
-                    .spawn().unwrap();
+                    .arg(&for_build.get_object_path(&self.name))
+                    .spawn().unwrap());
 
-                match child.wait() {
-                    Ok(exit_status) => {
-                        
-                        if exit_status.success() {
-                            println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Complete".green().bold(), for_build.path());
-                            self.freeze(&for_build);
-                            objects.push(output_name_for_object);
-                            successful_number += 1;
-                        } else {
-                            println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Fail".red().bold(), for_build.path());
-                            is_all_compiled = false;
-                            failed.push(&for_build);
-                        }
-                    },
-                    Err(_) => {
-                        println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Fail".red().bold(), for_build.path());
-                        is_all_compiled = false;
-                        failed.push(&for_build);
-                    },
-                }
-                built.push(for_build.path());
+                built.push(&for_build);
             });
-            
-            if is_all_compiled && !failed.contains(&modified_file){
-                self.freeze(&modified_file);
+        }
+        while childs.len() > 0 {
+            childs.retain(|file, child|{
+                handle_child(child, *file)
+            });
+        }
+
+        for (dep, srcs) in &self.deps_src {
+            if srcs.iter().all(|src|{
+                !failed.contains(&src)
+            }) {
+                self.freeze(dep);
             }
         }
-        if !is_successful {
-            println!("{:>RESULT_BORDED_WIDTH$} {}. Compiled {}/{}", "Fail".red().bold(), "compiling".cyan(), successful_number, built.len());
+
+        if !failed.is_empty() {
+            println!("{:>RESULT_BORDED_WIDTH$} {}. Compiled {}/{}", "Fail".red().bold(), "compiling".cyan(), built.len() - failed.len(), built.len());
             return false;
         }
         println!("{:>RESULT_BORDED_WIDTH$} {}", "Complete".green().bold(), "compiling".cyan());

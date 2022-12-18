@@ -39,6 +39,14 @@ impl File {
         self.path.clone()
     }
 
+    pub fn get_object_path(&self, section_name: &String) -> String {
+        let file_name = self.path().replace("/", "|");
+        let without_extension = file_name.strip_suffix(".cpp").or_else(||file_name.strip_suffix(".c"))
+            .expect("Expected cpp or c file");
+
+        format!(".abs/{}/binary/{}{}", section_name, without_extension, ".o")
+    }
+
     pub fn modified(&self) -> NaiveDateTime {
         self.last_modification
     }
