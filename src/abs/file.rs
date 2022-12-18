@@ -43,8 +43,8 @@ impl File {
         self.last_modification
     }
 
-    pub fn is_modified(&self, compare_time: NaiveDateTime) -> bool {
-        self.last_modification.timestamp() != compare_time.timestamp()
+    pub fn is_modified(&self, compare_time: &NaiveDateTime) -> bool {
+        self.last_modification.timestamp() > compare_time.timestamp()
     }
 
     pub fn modification_time_to_string(&self) -> String {

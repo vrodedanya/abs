@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Read};
 use chrono::NaiveDateTime;
 use colored::Colorize;
 use super::file::File;
@@ -12,7 +12,7 @@ pub enum SectionError {
 #[allow(unused)]
 #[derive(Debug)]
 pub struct Section {
-    name: String,
+    pub name: String,
     files: Vec<File>,
     include_directories: Vec<String>,
     deps_src: HashMap<File, Vec<File>>,
@@ -150,23 +150,28 @@ impl Section {
         return map;
     }
 
+    fn get_frozen_time(&self, file: &File) -> Option<NaiveDateTime> {
+        let f = std::fs::File::open(format!(".abs/{}/frozen/{}", self.name, file.path().replace("/", "|")));
+        if f.is_err() {
+            return None;
+        }
+        let mut reader = std::io::BufReader::new(f.unwrap());
+        let mut content = String::new();
+        let res = std::io::BufRead::read_line(&mut reader, &mut content).expect("expect string in the file");
+
+        let time = NaiveDateTime::parse_from_str(&content, "%Y-%m-%d/%T");
+        if time.is_err() {
+            return None;
+        }
+        Some(time.unwrap())
+    }
+
     fn get_modified(&self, files: &Vec<File>) -> Vec<File> {
         let mut files = files.clone();
         files.retain(|file| {
-            let f = std::fs::File::open(format!(".abs/{}/frozen/{}", self.name, file.path().replace("/", "|")));
-            if f.is_err() {
-                return true;
-            }
-            let f = f.unwrap();
-            let mut f = std::io::BufReader::new(f);
-            let mut content = String::new();
-            let res = std::io::BufRead::read_line(&mut f, &mut content).expect("expect string in the file");
-
-            let time = NaiveDateTime::parse_from_str(&content, "%Y-%m-%d/%T").unwrap().into();
-            if file.is_modified(time) {
-                return true;
-            } else {
-                return false;
+            match self.get_frozen_time(file) {
+                Some(frozen_time) => file.is_modified(&frozen_time),
+                None => true
             }
         });
         return files;
@@ -177,7 +182,9 @@ impl Section {
         let f = std::fs::File::create(format!(".abs/{}/frozen/{}", self.name, file.path().replace("/", r"|")))
             .expect("Unable to create file");
         let mut f = std::io::BufWriter::new(f);
-        std::io::Write::write(&mut f, file.modification_time_to_string().as_bytes()).expect("writted");
+        let file_changed = file.modified().format("%Y-%m-%d/%T").to_string();
+        let now = chrono::Local::now().naive_local().format("%Y-%m-%d/%T").to_string();
+        std::io::Write::write(&mut f, now.as_bytes()) .expect("writted");
     }
 
 }
@@ -185,35 +192,73 @@ impl Section {
 #[allow(unused)]
 impl Section {
     pub fn check(&self) -> bool {
+        let mut modified = self.get_modified(&self.deps_src.keys().cloned().collect());
+        modified.append(&mut self.collect_missing_objects());
+
+        if modified.is_empty() && std::path::Path::new(&format!(".abs/{}/binary/{}", self.name, self.name)).exists() {
+            println!("{:>RESULT_BORDED_WIDTH$} {}", "Checking".bright_green(), "everything is ok");
+            return true;
+        }
+
         let mut is_successful = true;
+
         let mut built: Vec<String> = vec![];
-        for (dep, srcs) in &self.deps_src {
-            for src in srcs.iter() {
-                if built.contains(&src.path()) || src.path().ends_with(".hpp") || src.path().ends_with(".h") {
+        let mut compiled_number = 0;
+
+        for modified_file in &modified {
+            for for_build in &self.deps_src[modified_file] {
+                if built.contains(&for_build.path()) || for_build.path().ends_with(".hpp") || for_build.path().ends_with(".h") {
                     continue;
                 }
-                let args = self.include_directories.iter().map(|str|format!("-I{}", str));
+                let included_directories_argument = self.include_directories.iter().map(|str|format!("-I{}", str));
+
                 let mut child = std::process::Command::new("g++")
+                    .args(included_directories_argument)
                     .arg("-fsyntax-only")
-                    .args(args)
-                    .arg(&src.path())
+                    .arg(&for_build.path())
                     .spawn().unwrap();
 
+                let mut output = String::new();
+
+
+                    
                 match child.wait() {
                     Ok(exit_status) => {
+                        let stderr = child.stdout;
+                        if stderr.is_some() {
+                            let mut reader = std::io::BufReader::new(stderr.unwrap());
+                            reader.read_to_string(&mut output);
+                        }
+
                         if exit_status.success() {
-                            println!("Complete: {}", src.path());
+                            println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Ok".green().bold(), for_build.path());
+                            compiled_number += 1;
                         } else {
-                            println!("Failed: {}", src.path());
+                            println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Fail".red().bold(), for_build.path());
+                            if !output.is_empty() {
+                                println!("{}", output);
+                            }
                             is_successful = false;
+                            built.push(for_build.path());
+                            continue;
                         }
                     },
-                    Err(_) => println!("Failed: {}", src.path()),
+                    Err(_) => {
+                        println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Fail".red().bold(), for_build.path());
+                        is_successful = false;
+                        built.push(for_build.path());
+                    },
                 }
-                built.push(src.path());
+
+                built.push(for_build.path());
             }
         }
-        return is_successful;
+        if !is_successful {
+            println!("{:>RESULT_BORDED_WIDTH$} Ok {}/{}", "Got errors while checking:".red().bold(), compiled_number, built.len());
+            return false;
+        }
+        println!("{:>RESULT_BORDED_WIDTH$}", "Everything is ok".green().bold());
+        return true;
     }
 
     pub fn link(&self) -> bool {
@@ -264,13 +309,25 @@ impl Section {
         }).map(|file|file.clone()).collect()
     }
 
+    pub fn check_is_executable_exist(&self) -> bool {
+        std::path::Path::new(&format!(".abs/{}/binary/{}", self.name, self.name)).exists()
+    }
+
+    pub fn get_executable_modification_time(&self) -> Option<NaiveDateTime> {
+        if let Ok(file) = File::from_path(format!(".abs/{}/{}", self.name, self.name)) {
+            Some(file.modified())
+        } else {
+            None
+        }
+    }
+
     pub fn build(&self) -> bool {
         std::fs::create_dir_all(format!(".abs/{}/binary/", self.name));
 
         let mut modified = self.get_modified(&self.deps_src.keys().cloned().collect());
         modified.append(&mut self.collect_missing_objects());
 
-        if modified.is_empty() && std::path::Path::new(&format!(".abs/{}/binary/{}", self.name, self.name)).exists() {
+        if modified.is_empty() && self.check_is_executable_exist() {
             println!("{:>RESULT_BORDED_WIDTH$} {}", "Compiling".bright_green(), "nothing to compile");
             return true;
         }
@@ -281,10 +338,23 @@ impl Section {
 
         let mut objects: Vec<String> = vec![];
 
+        let mut failed: Vec<&File> = vec![];
+
+        let mut successful_number = 0;
+
         for modified_file in &modified {
-            for for_build in &self.deps_src[modified_file] {
+            let mut is_all_compiled = true;
+            self.deps_src[modified_file].iter().for_each(|for_build|{
                 if built.contains(&for_build.path()) || for_build.path().ends_with(".hpp") || for_build.path().ends_with(".h") {
-                    continue;
+                    return;
+                }
+                if for_build.path() != modified_file.path() {
+                    if match self.get_frozen_time(&for_build) {
+                        Some(for_build_frozen_time) => !modified_file.is_modified(&for_build_frozen_time),
+                        None => false,
+                    } {
+                        return
+                    }
                 }
                 let included_directories_argument = self.include_directories.iter().map(|str|format!("-I{}", str));
 
@@ -308,27 +378,29 @@ impl Section {
                         if exit_status.success() {
                             println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Complete".green().bold(), for_build.path());
                             self.freeze(&for_build);
+                            objects.push(output_name_for_object);
+                            successful_number += 1;
                         } else {
                             println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Fail".red().bold(), for_build.path());
-                            is_successful = false;
-                            built.push(for_build.path());
-                            continue;
+                            is_all_compiled = false;
+                            failed.push(&for_build);
                         }
                     },
                     Err(_) => {
-                        println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Fail".red().bold(), file_name);
-                        is_successful = false;
-                        built.push(for_build.path());
+                        println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Fail".red().bold(), for_build.path());
+                        is_all_compiled = false;
+                        failed.push(&for_build);
                     },
                 }
-
-                objects.push(output_name_for_object);
                 built.push(for_build.path());
+            });
+            
+            if is_all_compiled && !failed.contains(&modified_file){
+                self.freeze(&modified_file);
             }
-            self.freeze(&modified_file);
         }
         if !is_successful {
-            println!("{:>RESULT_BORDED_WIDTH$} {}", "Failed".red().bold(), "compiling".cyan());
+            println!("{:>RESULT_BORDED_WIDTH$} {}. Compiled {}/{}", "Fail".red().bold(), "compiling".cyan(), successful_number, built.len());
             return false;
         }
         println!("{:>RESULT_BORDED_WIDTH$} {}", "Complete".green().bold(), "compiling".cyan());
