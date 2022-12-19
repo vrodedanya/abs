@@ -1,7 +1,7 @@
 use std::{collections::HashMap, io::Read, process::Child};
 use chrono::NaiveDateTime;
 use colored::Colorize;
-use super::file::File;
+use super::{file::File, profile::Profile};
 
 #[derive(Debug)]
 pub enum SectionError {
@@ -150,8 +150,8 @@ impl Section {
         return map;
     }
 
-    fn get_frozen_time(&self, file: &File) -> Option<NaiveDateTime> {
-        let f = std::fs::File::open(format!(".abs/{}/frozen/{}", self.name, file.path().replace("/", "|")));
+    fn get_frozen_time(&self, file: &File, profile: &Profile) -> Option<NaiveDateTime> {
+        let f = std::fs::File::open(format!(".abs/{}/{}/frozen/{}", self.name, profile.name, file.path().replace("/", "|")));
         if f.is_err() {
             return None;
         }
@@ -166,10 +166,10 @@ impl Section {
         Some(time.unwrap())
     }
 
-    fn get_modified(&self, files: &Vec<File>) -> Vec<File> {
+    fn get_modified(&self, files: &Vec<File>, profile: &Profile) -> Vec<File> {
         let mut files = files.clone();
         files.retain(|file| {
-            match self.get_frozen_time(file) {
+            match self.get_frozen_time(file, profile) {
                 Some(frozen_time) => file.is_modified(&frozen_time),
                 None => true
             }
@@ -177,9 +177,9 @@ impl Section {
         return files;
     }
 
-    fn freeze(&self, file: &File) {
-        std::fs::create_dir_all(format!(".abs/{}/frozen/", self.name));
-        let f = std::fs::File::create(format!(".abs/{}/frozen/{}", self.name, file.path().replace("/", r"|")))
+    fn freeze(&self, file: &File, profile: &Profile) {
+        std::fs::create_dir_all(format!(".abs/{}/{}/frozen/", self.name, profile.name));
+        let f = std::fs::File::create(format!(".abs/{}/{}/frozen/{}", self.name, profile.name, file.path().replace("/", r"|")))
             .expect("Unable to create file");
         let mut f = std::io::BufWriter::new(f);
         let file_changed = file.modified().format("%Y-%m-%d/%T").to_string();
@@ -191,11 +191,11 @@ impl Section {
 
 #[allow(unused)]
 impl Section {
-    pub fn check(&self) -> bool {
-        let mut modified = self.get_modified(&self.deps_src.keys().cloned().collect());
-        modified.append(&mut self.collect_missing_objects());
+    pub fn check(&self, profile: &Profile) -> bool {
+        let mut modified = self.get_modified(&self.deps_src.keys().cloned().collect(), profile);
+        modified.append(&mut self.collect_missing_objects(profile));
 
-        if modified.is_empty() && std::path::Path::new(&format!(".abs/{}/binary/{}", self.name, self.name)).exists() {
+        if modified.is_empty() && std::path::Path::new(&format!(".abs/{}/{}/binary/{}", self.name, profile.name, self.name)).exists() {
             println!("{:>RESULT_BORDED_WIDTH$} {}", "Checking".bright_green(), "everything is ok");
             return true;
         }
@@ -213,6 +213,9 @@ impl Section {
                 let included_directories_argument = self.include_directories.iter().map(|str|format!("-I{}", str));
 
                 let mut child = std::process::Command::new("g++")
+                    .args(&profile.options)
+                    .arg(&profile.standard)
+                    .args(&profile.defines)
                     .args(included_directories_argument)
                     .arg("-fsyntax-only")
                     .arg(&for_build.path())
@@ -261,8 +264,8 @@ impl Section {
         return true;
     }
 
-    pub fn link(&self) -> bool {
-        let objects: Vec<String> = std::fs::read_dir(format!(".abs/{}/binary/", self.name)).unwrap()
+    pub fn link(&self, profile: &Profile) -> bool {
+        let objects: Vec<String> = std::fs::read_dir(format!(".abs/{}/{}/binary/", self.name, profile.name)).unwrap()
             .filter(|file|{
             let file = file.as_ref().unwrap();
             return file.file_name().to_str().unwrap().ends_with(".o");
@@ -272,10 +275,10 @@ impl Section {
         }).collect();
         // linking
         let mut child = std::process::Command::new("g++")
+            .args(&profile.linking_directories)
             .args(objects)
-            .arg("-fPIC")
             .arg("-o")
-            .arg(format!(".abs/{}/binary/{}", self.name, self.name))
+            .arg(format!(".abs/{}/{}/binary/{}", self.name, profile.name, self.name))
             .spawn().unwrap();
 
         match child.wait() {
@@ -295,13 +298,13 @@ impl Section {
         return true;
     }
 
-    pub fn collect_missing_objects(&self) -> Vec<File> {
+    pub fn collect_missing_objects(&self, profile: &Profile) -> Vec<File> {
         self.files.iter().filter(|file|{
             if file.path().ends_with(".cpp") || file.path().ends_with(".c") {
                 let temp = file.path().replace("/", "|");
-                let name = &format!(".abs/{}/binary/{}.o", self.name, temp
-                .strip_suffix(".cpp")
-                .or_else(||temp.strip_suffix(".c")).unwrap());
+                let name = &format!(".abs/{}/{}/binary/{}.o", self.name, profile.name, temp
+                    .strip_suffix(".cpp")
+                    .or_else(||temp.strip_suffix(".c")).unwrap());
                 if !std::path::Path::new(name).exists() {
                     return true;
                 }
@@ -310,25 +313,17 @@ impl Section {
         }).map(|file|file.clone()).collect()
     }
 
-    pub fn check_is_executable_exist(&self) -> bool {
-        std::path::Path::new(&format!(".abs/{}/binary/{}", self.name, self.name)).exists()
+    pub fn check_is_executable_exist(&self, profile: &Profile) -> bool {
+        std::path::Path::new(&format!(".abs/{}/{}/binary/{}", self.name, profile.name, self.name)).exists()
     }
 
-    pub fn get_executable_modification_time(&self) -> Option<NaiveDateTime> {
-        if let Ok(file) = File::from_path(format!(".abs/{}/{}", self.name, self.name)) {
-            Some(file.modified())
-        } else {
-            None
-        }
-    }
+    pub fn build(&self, profile: &Profile) -> bool {
+        std::fs::create_dir_all(format!(".abs/{}/{}/binary/", self.name, profile.name));
 
-    pub fn build(&self) -> bool {
-        std::fs::create_dir_all(format!(".abs/{}/binary/", self.name));
+        let mut modified = self.get_modified(&self.deps_src.keys().cloned().collect(), profile);
+        modified.append(&mut self.collect_missing_objects(profile));
 
-        let mut modified = self.get_modified(&self.deps_src.keys().cloned().collect());
-        modified.append(&mut self.collect_missing_objects());
-
-        if modified.is_empty() && self.check_is_executable_exist() {
+        if modified.is_empty() && self.check_is_executable_exist(profile) {
             println!("{:>RESULT_BORDED_WIDTH$} {}", "Compiling".bright_green(), "nothing to compile");
             return true;
         }
@@ -349,7 +344,7 @@ impl Section {
                     let result = result.unwrap();
                     if result.success() {
                         println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Complete".green().bold(), file.path());
-                        self.freeze(&file);
+                        self.freeze(&file, profile);
                     } else {
                         println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Fail".red().bold(), file.path());
                         failed.push(file);
@@ -366,7 +361,7 @@ impl Section {
                 if built.contains(&for_build) || for_build.path().ends_with(".hpp") || for_build.path().ends_with(".h") {
                     return;
                 }
-                if for_build.path() != modified_file.path() && match self.get_frozen_time(&for_build) { // if file was frozen after changing dependency
+                if for_build.path() != modified_file.path() && match self.get_frozen_time(&for_build, profile) { // if file was frozen after changing dependency
                         Some(for_build_frozen_time) => !modified_file.is_modified(&for_build_frozen_time),
                         None => false,
                     } {
@@ -379,12 +374,15 @@ impl Section {
                         handle_child(child, *file)
                     });
                 }
-                childs.insert(&for_build, std::process::Command::new("g++")
+                childs.insert(&for_build, std::process::Command::new(&profile.compiler)
                     .arg("-c")
-                    .args(included_directories_argument)
                     .arg(&for_build.path())
+                    .args(&profile.options)
+                    .arg(&profile.standard)
+                    .args(&profile.defines)
+                    .args(included_directories_argument)
                     .arg("-o")
-                    .arg(&for_build.get_object_path(&self.name))
+                    .arg(&for_build.get_object_path(&self.name, profile))
                     .spawn().unwrap());
 
                 built.push(&for_build);
@@ -400,7 +398,7 @@ impl Section {
             if srcs.iter().all(|src|{
                 !failed.contains(&src)
             }) {
-                self.freeze(dep);
+                self.freeze(dep, profile);
             }
         }
 
@@ -410,15 +408,15 @@ impl Section {
         }
         println!("{:>RESULT_BORDED_WIDTH$} {}", "Complete".green().bold(), "compiling".cyan());
 
-        return self.link();
+        return self.link(profile);
     }
 
-    pub fn run(&self) -> bool{
-        if !self.build() {
+    pub fn run(&self, profile: &Profile) -> bool{
+        if !self.build(profile) {
             return false;
         }
         println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Running section".bright_green(), self.name);
-        let mut child = std::process::Command::new(format!(".abs/{}/binary/{}", self.name, self.name))
+        let mut child = std::process::Command::new(format!(".abs/{}/{}/binary/{}", self.name, profile.name, self.name))
             .spawn().unwrap();
         return true;
     }

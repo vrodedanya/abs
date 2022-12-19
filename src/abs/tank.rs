@@ -1,6 +1,7 @@
 use std::fs;
 
 use super::section::Section;
+use super::profiles_manager::ProfilesManager;
 
 #[derive(Debug)]
 pub enum TankError {
@@ -16,7 +17,9 @@ pub struct Tank {
     name: String,
     config: toml::Value,
     version: String, // todo Probably semver type?
-    sections: Vec<Section>
+    sections: Vec<Section>,
+
+    profiles_manager: ProfilesManager
 }
 
 #[allow(unused)]
@@ -37,8 +40,7 @@ impl Tank {
 
         let mut sections: Vec<Section> = vec![];
 
-        if sections_config.is_some() {
-            let sections_config = sections_config.unwrap();
+        if let Some(sections_config) = sections_config {
             if let toml::Value::Table(t) = sections_config {
                 for (key, value) in t {
                     sections.push(Section::new(key.to_string(), &value)
@@ -51,20 +53,21 @@ impl Tank {
             name: name_of_tank.as_str().ok_or_else(||TankError::WrongTypeOfField("Can't find name of tank".to_string()))?.to_string(),
             config: config.clone(),
             version: version_of_tank.as_str().ok_or_else(||TankError::WrongTypeOfField("Can't find version of tank".to_string()))?.to_string(),
-            sections
+            sections,
+            profiles_manager: ProfilesManager::new(config.get("profiles"))
         };
         return Ok(tank);
     }
 
     pub fn check(&self) -> bool {
-        self.sections.iter().all(|section|section.check())
+        self.sections.iter().all(|section|section.check(self.profiles_manager.get("release").unwrap()))
     }
 
     pub fn build(&self) -> bool {
-        self.sections.iter().all(|section|section.build())
+        self.sections.iter().all(|section|section.build(self.profiles_manager.get("release").unwrap()))
     }
     pub fn run(&self) -> bool {
-        self.sections.iter().all(|section|section.run())
+        self.sections.iter().all(|section|section.run(self.profiles_manager.get("release").unwrap()))
     }
 
     pub fn print_sections(&self) {
