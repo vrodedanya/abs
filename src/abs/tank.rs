@@ -63,11 +63,22 @@ impl Tank {
         self.sections.iter().all(|section|section.check(self.profiles_manager.get("release").unwrap()))
     }
 
-    pub fn build(&self) -> bool {
-        self.sections.iter().all(|section|section.build(self.profiles_manager.get("release").unwrap()))
+    pub fn build(&self, profile_name: &str) -> bool {
+        if let Some(profile) = self.profiles_manager.get(profile_name) {
+            self.sections.iter().all(|section|section.build(profile))
+        } else {
+            println!("'{}' doesn't exist", profile_name);
+            return false;
+        }
     }
-    pub fn run(&self) -> bool {
-        self.sections.iter().all(|section|section.run(self.profiles_manager.get("release").unwrap()))
+    pub fn run(&self, profile_name: &str) -> bool {
+        if let Some(profile) = self.profiles_manager.get(profile_name) {
+            self.sections.iter().all(|section|section.run(profile))
+
+        } else {
+            println!("'{}' doesn't exist", profile_name);
+            return false;
+        }
     }
 
     pub fn print_sections(&self) {

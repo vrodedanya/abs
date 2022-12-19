@@ -274,8 +274,9 @@ impl Section {
             return file.path().canonicalize().unwrap().to_str().unwrap().to_string();
         }).collect();
         // linking
-        let mut child = std::process::Command::new("g++")
+        let mut child = std::process::Command::new(&profile.compiler)
             .args(&profile.linking_directories)
+            .args(&profile.linking_options)
             .args(objects)
             .arg("-o")
             .arg(format!(".abs/{}/{}/binary/{}", self.name, profile.name, self.name))
@@ -415,7 +416,7 @@ impl Section {
         if !self.build(profile) {
             return false;
         }
-        println!("{:>RESULT_BORDED_WIDTH$} '{}'", "Running section".bright_green(), self.name);
+        println!("{:>RESULT_BORDED_WIDTH$} '{}' with profile '{}'", "Running".bright_green(), self.name, profile.name);
         let mut child = std::process::Command::new(format!(".abs/{}/{}/binary/{}", self.name, profile.name, self.name))
             .spawn().unwrap();
         return true;

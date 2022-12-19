@@ -8,6 +8,7 @@ pub struct Profile {
     pub standard: String,
     pub defines: Vec<String>,
     pub options: Vec<String>,
+    pub linking_options: Vec<String>,
     pub linking_directories: Vec<String>,
     pub include_directories: Vec<String>,
 }
@@ -21,6 +22,7 @@ impl Profile {
             standard: String::new(),
             defines: vec![],
             options: vec![],
+            linking_options: vec![],
             linking_directories: vec![],
             include_directories: vec![]
         }

@@ -2,10 +2,11 @@ mod abs;
 
 use abs::prelude::*;
 
-use clap::Command;
+use clap::{Command, arg};
 
 fn cli() -> Command {
     Command::new("abs")
+        .infer_subcommands(true)
         .about("Another build system for C++. Under development")
         .subcommand_required(true)
         .arg_required_else_help(true)
@@ -21,10 +22,18 @@ fn cli() -> Command {
         .subcommand(
             Command::new("build")
                 .about("Builds the current section")
+                .arg(
+                    arg!(-p --profile <PROFILE> "Sets profile for building")
+                    .required(false)
+                )
         )
         .subcommand(
             Command::new("run")
                 .about("Builds and runs")
+                .arg(
+                    arg!(-p --profile <PROFILE> "Sets profile for running")
+                    .required(false)
+                )
         )
 }
 
@@ -39,11 +48,19 @@ fn main() {
         Some(("check", _)) => {
             result = tank.check();
         },
-        Some(("build", _)) => {
-            result = tank.build();
+        Some(("build", matches)) => {
+            let mut profile = String::from("debug");
+            if let Some(input) = matches.get_one::<String>("profile") {
+                profile = input.clone();
+            }
+            result = tank.build(&profile);
         },
-        Some(("run", _)) => {
-            result = tank.run();
+        Some(("run", matches)) => {
+            let mut profile = String::from("debug");
+            if let Some(input) = matches.get_one::<String>("profile") {
+                profile = input.clone();
+            }
+            result = tank.run(&profile);
         },
         None => {
             println!("Unexpected command")
