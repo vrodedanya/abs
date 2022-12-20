@@ -24,7 +24,7 @@ impl Profile {
             options: vec![],
             linking_options: vec![],
             linking_directories: vec![],
-            include_directories: vec![]
+            include_directories: vec![],
         }
     }
 }
