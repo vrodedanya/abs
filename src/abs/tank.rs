@@ -59,8 +59,13 @@ impl Tank {
         return Ok(tank);
     }
 
-    pub fn check(&self) -> bool {
-        self.sections.iter().all(|section|section.check(self.profiles_manager.get("release").unwrap()))
+    pub fn check(&self, profile_name: &str) -> bool {
+        if let Some(profile) = self.profiles_manager.get(profile_name) {
+            self.sections.iter().all(|section|section.check(profile))
+        } else {
+            println!("'{}' doesn't exist", profile_name);
+            return false;
+        }
     }
 
     pub fn build(&self, profile_name: &str) -> bool {

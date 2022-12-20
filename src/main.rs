@@ -45,8 +45,12 @@ fn main() {
         Some(("files", _)) => {
             tank.print_sections();
         },
-        Some(("check", _)) => {
-            result = tank.check();
+        Some(("check", matches)) => {
+            let mut profile = String::from("debug");
+            if let Some(input) = matches.get_one::<String>("profile") {
+                profile = input.clone();
+            }
+            result = tank.check(&profile);
         },
         Some(("build", matches)) => {
             let mut profile = String::from("debug");
