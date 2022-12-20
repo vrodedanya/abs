@@ -2,7 +2,7 @@ mod abs;
 
 use abs::prelude::*;
 
-use clap::{Command, arg};
+use clap::{arg, Command};
 
 fn cli() -> Command {
     Command::new("abs")
@@ -11,29 +11,17 @@ fn cli() -> Command {
         .subcommand_required(true)
         .arg_required_else_help(true)
         .allow_external_subcommands(true)
-        .subcommand(
-            Command::new("files")
-                .about("Shows collected files ")
-        )
-        .subcommand(
-            Command::new("check")
-                .about("Checks that the current section can be built")
-        )
+        .subcommand(Command::new("files").about("Shows collected files "))
+        .subcommand(Command::new("check").about("Checks that the current section can be built"))
         .subcommand(
             Command::new("build")
                 .about("Builds the current section")
-                .arg(
-                    arg!(-p --profile <PROFILE> "Sets profile for building")
-                    .required(false)
-                )
+                .arg(arg!(-p --profile <PROFILE> "Sets profile for building").required(false)),
         )
         .subcommand(
             Command::new("run")
                 .about("Builds and runs")
-                .arg(
-                    arg!(-p --profile <PROFILE> "Sets profile for running")
-                    .required(false)
-                )
+                .arg(arg!(-p --profile <PROFILE> "Sets profile for running").required(false)),
         )
 }
 
@@ -44,32 +32,32 @@ fn main() {
     match matches.subcommand() {
         Some(("files", _)) => {
             tank.print_sections();
-        },
+        }
         Some(("check", matches)) => {
             let mut profile = String::from("debug");
             if let Some(input) = matches.get_one::<String>("profile") {
                 profile = input.clone();
             }
             result = tank.check(&profile);
-        },
+        }
         Some(("build", matches)) => {
             let mut profile = String::from("debug");
             if let Some(input) = matches.get_one::<String>("profile") {
                 profile = input.clone();
             }
             result = tank.build(&profile);
-        },
+        }
         Some(("run", matches)) => {
             let mut profile = String::from("debug");
             if let Some(input) = matches.get_one::<String>("profile") {
                 profile = input.clone();
             }
             result = tank.run(&profile);
-        },
+        }
         None => {
             println!("Unexpected command")
-        },
-        _ => unreachable!()
+        }
+        _ => unreachable!(),
     }
 
     if result {
