@@ -16,7 +16,7 @@ fn cli() -> Command {
         .subcommand(
             Command::new("new")
                 .about("Creates new tank directory")
-                .arg(arg!(<NAME> "name of tank").required(true)),
+                .arg(arg!(<tank_name> "name of tank").required(true)),
         )
         .subcommand(Command::new("files").about("Shows collected files"))
         .subcommand(
@@ -65,7 +65,7 @@ fn main() {
     let mut result = false;
     match matches.subcommand() {
         Some(("new", matches)) => {
-            if let Some(tank_name) = matches.get_one::<String>("name") {
+            if let Some(tank_name) = matches.get_one::<String>("tank_name") {
                 if let Err(err) = std::fs::create_dir_all(format!("{}/.abs/", tank_name)) {
                     println!("Failed to create directory: {}", err);
                     std::process::exit(1);
