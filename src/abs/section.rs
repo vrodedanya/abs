@@ -180,12 +180,7 @@ impl Section {
     }
 
     fn get_frozen_time(&self, file: &File, profile: &Profile) -> Option<NaiveDateTime> {
-        let f = std::fs::File::open(format!(
-            ".abs/{}/{}/frozen/{}",
-            self.name,
-            profile.name,
-            file.path().replace("/", "|")
-        ));
+        let f = std::fs::File::open(file.get_freeze_path(&self.name, profile));
         if f.is_err() {
             return None;
         }
@@ -212,13 +207,8 @@ impl Section {
 
     fn freeze(&self, file: &File, profile: &Profile) {
         std::fs::create_dir_all(format!(".abs/{}/{}/frozen/", self.name, profile.name));
-        let f = std::fs::File::create(format!(
-            ".abs/{}/{}/frozen/{}",
-            self.name,
-            profile.name,
-            file.path().replace("/", r"|")
-        ))
-        .expect("Unable to create file");
+        let f = std::fs::File::create(file.get_freeze_path(&self.name, profile))
+            .expect("Unable to create file");
         let mut f = std::io::BufWriter::new(f);
         let file_changed = file.modified().format("%Y-%m-%d/%T").to_string();
         let now = chrono::Local::now()
@@ -341,6 +331,7 @@ impl Section {
 
     pub fn link(&self, profile: &Profile) -> bool {
         let objects: Vec<String> =
+            // todo mb just collect files from prev state?
             std::fs::read_dir(format!(".abs/{}/{}/binary/", self.name, profile.name))
                 .unwrap()
                 .filter(|file| {
@@ -405,16 +396,8 @@ impl Section {
             .iter()
             .filter(|file| {
                 if file.path().ends_with(".cpp") || file.path().ends_with(".c") {
-                    let temp = file.path().replace("/", "|");
-                    let name = &format!(
-                        ".abs/{}/{}/binary/{}.o",
-                        self.name,
-                        profile.name,
-                        temp.strip_suffix(".cpp")
-                            .or_else(|| temp.strip_suffix(".c"))
-                            .unwrap()
-                    );
-                    if !std::path::Path::new(name).exists() {
+                    let name = &file.get_object_path(&self.name, profile);
+                    if !std::path::Path::new(&name).exists() {
                         return true;
                     }
                 }
@@ -436,6 +419,7 @@ impl Section {
         std::fs::create_dir_all(format!(".abs/{}/{}/binary/", self.name, profile.name));
 
         let mut modified = self.get_modified(&self.deps_src.keys().cloned().collect(), profile);
+
         modified.append(&mut self.collect_missing_objects(profile));
 
         if modified.is_empty() && self.check_is_executable_exist(profile) {

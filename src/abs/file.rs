@@ -55,8 +55,30 @@ impl File {
         self.path.clone()
     }
 
-    pub fn get_object_path(&self, section_name: &String, profile: &Profile) -> String {
-        let file_name = self.path().replace("/", "|");
+    pub fn encode_path(path: &str) -> String {
+        let mut result = String::new();
+        let mut temp = path.clone();
+        loop {
+            let distance = temp.find('/');
+            if distance.is_none() {
+                if !temp.is_empty() {
+                    result += &temp.len().to_string();
+                    result += &temp;
+                }
+                break;
+            }
+            let distance = distance.unwrap();
+            result += &distance.to_string();
+            if distance != 0 {
+                result += &temp[0..distance];
+            }
+            temp = &temp[distance + 1..];
+        }
+        return result;
+    }
+
+    pub fn get_object_path(&self, section_name: &str, profile: &Profile) -> String {
+        let file_name = File::encode_path(&self.path);
         let without_extension = file_name
             .strip_suffix(".cpp")
             .or_else(|| file_name.strip_suffix(".c"))
@@ -65,6 +87,15 @@ impl File {
         format!(
             ".abs/{}/{}/binary/{}{}",
             section_name, profile.name, without_extension, ".o"
+        )
+    }
+
+    pub fn get_freeze_path(&self, section_name: &str, profile: &Profile) -> String {
+        format!(
+            ".abs/{}/{}/frozen/{}",
+            section_name,
+            profile.name,
+            File::encode_path(&self.path)
         )
     }
 
