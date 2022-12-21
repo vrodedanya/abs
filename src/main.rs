@@ -73,7 +73,7 @@ fn main() {
                 if let Ok(file) = std::fs::File::create(format!("{}/abs.toml", tank_name)) {
                     let mut writer = std::io::BufWriter::new(file);
                     if let Err(err) = writer.write(
-                        format!("[tank]\nname = {}\nversion = \"0.1.0\"", tank_name).as_bytes(),
+                        format!("[tank]\nname = \"{}\"\nversion = \"0.1.0\"", tank_name).as_bytes(),
                     ) {
                         println!("Failed to write to the configuration file: {}", err);
                     }
@@ -90,7 +90,7 @@ fn main() {
             tank.print_sections();
         }
         Some(("check", matches)) => {
-            let tank = Tank::new("abs.toml").unwrap();
+            let tank = get_tank();
             let mut profile = String::from("debug");
             if let Some(input) = matches.get_one::<String>("profile") {
                 profile = input.clone();
