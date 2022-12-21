@@ -8,4 +8,5 @@ pub mod prelude {
     pub use super::file::File;
     pub use super::section::Section;
     pub use super::tank::Tank;
+    pub use super::tank::TankError;
 }
