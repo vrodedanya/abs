@@ -94,6 +94,7 @@ impl Tank {
             return false;
         }
     }
+
     pub fn run(&self, profile_name: &str) -> bool {
         if let Some(profile) = self.profiles_manager.get(profile_name) {
             self.sections.iter().all(|section| section.run(profile))

@@ -43,7 +43,7 @@ impl ProfilesManager {
 
         let mut default_profiles: HashMap<String, Profile> = HashMap::new();
 
-        let mut release_profile = Profile::new("release");
+        let mut release_profile = Profile::empty("release");
         release_profile.compiler = "g++".to_string();
         release_profile.standard = "-std=c++17".to_string();
         release_profile.options = vec!["-O2", "-g0", "-Werror"]
@@ -52,7 +52,7 @@ impl ProfilesManager {
             .chain(default_flags.clone())
             .collect();
 
-        let mut debug_profile = Profile::new("debug");
+        let mut debug_profile = Profile::empty("debug");
         debug_profile.compiler = "g++".to_string();
         debug_profile.standard = "-std=c++17".to_string();
         debug_profile.options = vec!["-O0", "-g3", "-Werror"]
@@ -61,7 +61,7 @@ impl ProfilesManager {
             .chain(default_flags.clone())
             .collect();
 
-        let mut release_unsafe_profile = Profile::new("release-unsafe");
+        let mut release_unsafe_profile = Profile::empty("release-unsafe");
         release_unsafe_profile.compiler = "g++".to_string();
         release_unsafe_profile.standard = "-std=c++17".to_string();
         release_unsafe_profile.options = vec!["-O3", "-g0"]
@@ -70,7 +70,7 @@ impl ProfilesManager {
             .chain(default_flags.clone())
             .collect();
 
-        let mut debug_unsafe_profile = Profile::new("debug-unsafe");
+        let mut debug_unsafe_profile = Profile::empty("debug-unsafe");
         debug_unsafe_profile.compiler = "g++".to_string();
         debug_unsafe_profile.standard = "-std=c++17".to_string();
         debug_unsafe_profile.options = vec!["-O0", "-g3"]
@@ -79,7 +79,7 @@ impl ProfilesManager {
             .chain(default_flags.clone())
             .collect();
 
-        let mut debug_asan_profile = Profile::new("debug-asan");
+        let mut debug_asan_profile = Profile::empty("debug-asan");
         debug_asan_profile.compiler = "g++".to_string();
         debug_asan_profile.standard = "-std=c++17".to_string();
         debug_asan_profile
@@ -104,7 +104,7 @@ impl ProfilesManager {
         .chain(default_flags.clone())
         .collect();
 
-        let mut debug_tsan_profile = Profile::new("debug-tsan");
+        let mut debug_tsan_profile = Profile::empty("debug-tsan");
         debug_tsan_profile.compiler = "g++".to_string();
         debug_tsan_profile.standard = "-std=c++17".to_string();
         debug_tsan_profile
@@ -116,14 +116,32 @@ impl ProfilesManager {
             .chain(default_flags.clone())
             .collect();
 
-        /*
         if let Some(config) = config {
             if let toml::Value::Table(t) = config {
                 for (key, value) in t {
-                    println!("{} {:#?}", key, value);
+                    if key == "release" {
+                        release_profile.fill_from_config(value);
+                    } else if key == "debug" {
+                        debug_profile.fill_from_config(value);
+                    } else if key == "release-unsafe" {
+                        release_unsafe_profile.fill_from_config(value);
+                    } else if key == "debug-unsafe" {
+                        debug_unsafe_profile.fill_from_config(value);
+                    } else if key == "debug-asan" {
+                        debug_asan_profile.fill_from_config(value);
+                    } else if key == "debug-tsan" {
+                        debug_tsan_profile.fill_from_config(value);
+                    } else {
+                        match Profile::from_config(key, value) {
+                            Ok(profile) => {
+                                default_profiles.insert(key.to_string(), profile);
+                            }
+                            Err(error) => println!("Can't add {}: {:?}", key, error),
+                        };
+                    }
                 }
             }
-        } */
+        }
 
         default_profiles.insert(String::from("release"), release_profile);
         default_profiles.insert(String::from("debug"), debug_profile);
