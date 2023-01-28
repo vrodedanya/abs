@@ -6,7 +6,7 @@ use super::profile::Profile;
 #[derive(Debug)]
 pub enum FileError {
     CantGetMetaData(String),
-    ModificationTimeAnavailable(String),
+    ModificationTimeUnavailable(String),
     FileDoesntExist(String),
 }
 
@@ -47,7 +47,7 @@ impl File {
             .metadata()
             .map_err(|err| FileError::CantGetMetaData(err.to_string()))?
             .modified()
-            .map_err(|err| FileError::ModificationTimeAnavailable(err.to_string()))?;
+            .map_err(|err| FileError::ModificationTimeUnavailable(err.to_string()))?;
         Ok(File::from_system_time(path, modified)?)
     }
 
