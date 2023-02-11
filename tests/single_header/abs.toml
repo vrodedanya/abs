@@ -1,0 +1,7 @@
+[tank]
+name = "single_header"
+version = "0.1.0"
+
+[sections.main]
+source = "source"
+include = "source"

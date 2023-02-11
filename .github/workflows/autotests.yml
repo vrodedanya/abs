@@ -1,0 +1,29 @@
+name: autotests
+
+on:
+  pull_request:
+    branches:
+      - master
+      - develop
+  push:
+    branches:
+      - master
+      - develop
+
+env:
+  BUILD_TYPE: Develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: units
+        run: cargo test
+      - name: functional
+        run: |
+          cargo build
+          cd test
+          ./run.sh
+

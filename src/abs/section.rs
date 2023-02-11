@@ -19,7 +19,7 @@ pub struct Section {
     srcs_dep: HashMap<File, Vec<File>>,
 }
 
-const RESULT_BORDED_WIDTH: usize = 10;
+const RESULT_BORDER_WIDTH: usize = 10;
 
 #[allow(unused)]
 impl Section {
@@ -233,7 +233,7 @@ impl Section {
             .exists()
         {
             println!(
-                "{:>RESULT_BORDED_WIDTH$} {}",
+                "{:>RESULT_BORDER_WIDTH$} {}",
                 "Checking".bright_green(),
                 "everything is ok"
             );
@@ -280,14 +280,14 @@ impl Section {
 
                         if exit_status.success() {
                             println!(
-                                "{:>RESULT_BORDED_WIDTH$} '{}'",
+                                "{:>RESULT_BORDER_WIDTH$} '{}'",
                                 "Ok".green().bold(),
                                 for_build.path()
                             );
                             compiled_number += 1;
                         } else {
                             println!(
-                                "{:>RESULT_BORDED_WIDTH$} '{}'",
+                                "{:>RESULT_BORDER_WIDTH$} '{}'",
                                 "Fail".red().bold(),
                                 for_build.path()
                             );
@@ -301,7 +301,7 @@ impl Section {
                     }
                     Err(_) => {
                         println!(
-                            "{:>RESULT_BORDED_WIDTH$} '{}'",
+                            "{:>RESULT_BORDER_WIDTH$} '{}'",
                             "Fail".red().bold(),
                             for_build.path()
                         );
@@ -315,7 +315,7 @@ impl Section {
         }
         if !is_successful {
             println!(
-                "{:>RESULT_BORDED_WIDTH$} Ok {}/{}",
+                "{:>RESULT_BORDER_WIDTH$} Ok {}/{}",
                 "Got errors while checking:".red().bold(),
                 compiled_number,
                 built.len()
@@ -323,7 +323,7 @@ impl Section {
             return false;
         }
         println!(
-            "{:>RESULT_BORDED_WIDTH$}",
+            "{:>RESULT_BORDER_WIDTH$}",
             "Everything is ok".green().bold()
         );
         return true;
@@ -366,13 +366,13 @@ impl Section {
             Ok(exit_status) => {
                 if exit_status.success() {
                     println!(
-                        "{:>RESULT_BORDED_WIDTH$} {}",
+                        "{:>RESULT_BORDER_WIDTH$} {}",
                         "Complete".green().bold(),
                         "linking".cyan()
                     );
                 } else {
                     println!(
-                        "{:>RESULT_BORDED_WIDTH$} {}",
+                        "{:>RESULT_BORDER_WIDTH$} {}",
                         "Fail".red().bold(),
                         "linking".cyan()
                     );
@@ -381,7 +381,7 @@ impl Section {
             }
             Err(_) => {
                 println!(
-                    "{:>RESULT_BORDED_WIDTH$} {}",
+                    "{:>RESULT_BORDER_WIDTH$} {}",
                     "Fail".red().bold(),
                     "linking".cyan()
                 );
@@ -424,7 +424,7 @@ impl Section {
 
         if modified.is_empty() && self.check_is_executable_exist(profile) {
             println!(
-                "{:>RESULT_BORDED_WIDTH$} {}",
+                "{:>RESULT_BORDER_WIDTH$} {}",
                 "Compiling".bright_green(),
                 "nothing to compile"
             );
@@ -447,14 +447,14 @@ impl Section {
                     let result = result.unwrap();
                     if result.success() {
                         println!(
-                            "{:>RESULT_BORDED_WIDTH$} '{}'",
+                            "{:>RESULT_BORDER_WIDTH$} '{}'",
                             "Complete".green().bold(),
                             file.path()
                         );
                         self.freeze(&file, profile);
                     } else {
                         println!(
-                            "{:>RESULT_BORDED_WIDTH$} '{}'",
+                            "{:>RESULT_BORDER_WIDTH$} '{}'",
                             "Fail".red().bold(),
                             file.path()
                         );
@@ -524,7 +524,7 @@ impl Section {
 
         if !failed.is_empty() {
             println!(
-                "{:>RESULT_BORDED_WIDTH$} {}. Compiled {}/{}",
+                "{:>RESULT_BORDER_WIDTH$} {}. Compiled {}/{}",
                 "Fail".red().bold(),
                 "compiling".cyan(),
                 built.len() - failed.len(),
@@ -533,7 +533,7 @@ impl Section {
             return false;
         }
         println!(
-            "{:>RESULT_BORDED_WIDTH$} {}",
+            "{:>RESULT_BORDER_WIDTH$} {}",
             "Complete".green().bold(),
             "compiling".cyan()
         );
@@ -546,7 +546,7 @@ impl Section {
             return false;
         }
         println!(
-            "{:>RESULT_BORDED_WIDTH$} '{}' with profile '{}'",
+            "{:>RESULT_BORDER_WIDTH$} '{}' with profile '{}'",
             "Running".bright_green(),
             self.name,
             profile.name

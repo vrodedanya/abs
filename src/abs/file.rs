@@ -18,9 +18,9 @@ pub struct File {
 
 #[allow(unused)]
 impl File {
-    pub fn new(path: String, last_modification: NaiveDateTime) -> File {
+    pub fn new(path: &str, last_modification: NaiveDateTime) -> File {
         File {
-            path,
+            path: path.to_string(),
             last_modification,
         }
     }
@@ -78,15 +78,17 @@ impl File {
     }
 
     pub fn get_object_path(&self, section_name: &str, profile: &Profile) -> String {
-        let file_name = File::encode_path(&self.path);
-        let without_extension = file_name
+        // todo return error
+        let without_extension = self.path
             .strip_suffix(".cpp")
-            .or_else(|| file_name.strip_suffix(".c"))
+            .or_else(|| self.path.strip_suffix(".c"))
             .expect("Expected cpp or c file");
 
         format!(
-            ".abs/{}/{}/binary/{}{}",
-            section_name, profile.name, without_extension, ".o"
+            ".abs/{}/{}/binary/{}",
+            section_name,
+            profile.name, 
+            File::encode_path(&format!("{}{}", without_extension, ".o"))
         )
     }
 
@@ -111,3 +113,38 @@ impl File {
         self.last_modification.format("%Y-%m-%d/%T").to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+
+    use super::*;
+    #[test]
+    fn encoding_path() {
+        assert_eq!(File::encode_path("/home"), "04home");
+        assert_eq!(File::encode_path("home"), "4home");
+        assert_eq!(File::encode_path("/home/user/dir/projects"), "04home4user3dir8projects");
+        assert_eq!(File::encode_path("/test/"), "04test");
+    }
+
+    #[test]
+    fn object_path() {
+        let f = File::new("/some/test/path.cpp", Utc::now().naive_utc());
+        let prof = Profile::empty("profile");
+
+        assert_eq!(f.get_object_path("test", &prof), ".abs/test/profile/binary/04some4test6path.o");
+        assert_eq!(f.get_object_path("otherSection", &prof), ".abs/otherSection/profile/binary/04some4test6path.o");
+        assert_eq!(f.get_object_path("test", &prof), ".abs/test/profile/binary/04some4test6path.o");
+    }
+
+    #[test]
+    fn freeze_path() {
+        let f = File::new("/some/test/path.cpp", Utc::now().naive_utc());
+        let prof = Profile::empty("profile");
+
+        assert_eq!(f.get_freeze_path("test", &prof), ".abs/test/profile/frozen/04some4test8path.cpp");
+        assert_eq!(f.get_freeze_path("otherSection", &prof), ".abs/otherSection/profile/frozen/04some4test8path.cpp");
+        assert_eq!(f.get_freeze_path("test", &prof), ".abs/test/profile/frozen/04some4test8path.cpp");
+    }
+}
+
