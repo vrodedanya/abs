@@ -1,0 +1,7 @@
+[tank]
+name = "all_in_src"
+version = "0.1.0"
+
+[sections.main]
+source = "source"
+include = "source"

@@ -138,8 +138,16 @@ impl Section {
                     return File::from_path(path).unwrap();
                 }
                 // check specialized paths
-                return Section::get_dependency_path(&name, search_list)
-                    .expect(&(String::from("Dependency doesn't exist: ") + &name));
+                if let Some(val) = Section::get_dependency_path(&name, search_list) {
+                    return val;
+                } else {
+                    println!(
+                        "{:>RESULT_BORDER_WIDTH$} {}",
+                        "Failed to find ".bright_red(),
+                        name
+                    );
+                    std::process::exit(1);
+                }
             })
             .collect()
     }

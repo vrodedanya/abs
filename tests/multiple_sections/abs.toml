@@ -1,0 +1,11 @@
+[tank]
+name = "multiple sections"
+version = "0.1.0"
+
+[sections.main]
+source = "source/main"
+include = "include/main"
+
+[sections.sub]
+source = "source/sub"
+include = "include/sub"

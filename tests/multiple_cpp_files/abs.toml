@@ -1,0 +1,7 @@
+[tank]
+name = "multiple_cpp_files"
+version = "0.1.0"
+
+[sections.main]
+source = "source"
+include = "include"
