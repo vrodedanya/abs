@@ -60,7 +60,7 @@ impl Section {
             include_directories.push(include_dir.to_string());
         }
 
-        let deps_src = Section::create_map_dependecy_sources(&section_files, &include_directories);
+        let deps_src = Section::create_map_dependency_sources(&section_files, &include_directories);
         let srcs_dep =
             Section::create_map_source_dependencies(&section_files, &include_directories);
 
@@ -74,19 +74,19 @@ impl Section {
     }
 
     fn collect_files<const N: usize>(path: &str, suffixes: [&str; N]) -> Vec<File> {
-        let mut vec_of_pathes = vec![];
+        let mut vec_of_paths = vec![];
         for entry in std::fs::read_dir(path).unwrap() {
             let entry = entry.unwrap();
             let meta = entry.metadata().unwrap();
             let abs = entry.path().canonicalize().unwrap();
             let full_path = abs.to_str().unwrap();
             if meta.is_dir() {
-                vec_of_pathes.append(&mut Section::collect_files(full_path, suffixes));
+                vec_of_paths.append(&mut Section::collect_files(full_path, suffixes));
             } else if suffixes.iter().any(|&suffix| full_path.ends_with(suffix)) {
-                vec_of_pathes.push(File::from_path(full_path.to_owned()).unwrap());
+                vec_of_paths.push(File::from_path(full_path.to_owned()).unwrap());
             }
         }
-        return vec_of_pathes;
+        return vec_of_paths;
     }
 
     fn collect_default_includes() -> Vec<String> {
@@ -137,7 +137,7 @@ impl Section {
                     let path = format!("{}/{}", path_to_file, name);
                     return File::from_path(path).unwrap();
                 }
-                // check specialized pathes
+                // check specialized paths
                 return Section::get_dependency_path(&name, search_list)
                     .expect(&(String::from("Dependency doesn't exist: ") + &name));
             })
@@ -145,11 +145,11 @@ impl Section {
     }
 
     fn create_map_source_dependencies(
-        pathes: &Vec<File>,
+        paths: &Vec<File>,
         search_list: &Vec<String>,
     ) -> HashMap<File, Vec<File>> {
         let mut map: HashMap<File, Vec<File>> = HashMap::new();
-        for path in pathes {
+        for path in paths {
             map.insert(
                 path.to_owned(),
                 Section::collect_local_dependencies_for_file(&path.path(), &search_list)
@@ -161,12 +161,12 @@ impl Section {
         return map;
     }
 
-    fn create_map_dependecy_sources(
-        pathes: &Vec<File>,
+    fn create_map_dependency_sources(
+        paths: &Vec<File>,
         search_list: &Vec<String>,
     ) -> HashMap<File, Vec<File>> {
         let mut map: HashMap<File, Vec<File>> = HashMap::new();
-        let src_dep = Section::create_map_source_dependencies(pathes, search_list);
+        let src_dep = Section::create_map_source_dependencies(paths, search_list);
         for (source, dependencies) in src_dep.iter() {
             for dependency in dependencies {
                 if map.contains_key(dependency) {
@@ -215,7 +215,7 @@ impl Section {
             .naive_local()
             .format("%Y-%m-%d/%T")
             .to_string();
-        std::io::Write::write(&mut f, now.as_bytes()).expect("writted");
+        std::io::Write::write(&mut f, now.as_bytes()).expect("wrote");
     }
 }
 
@@ -435,7 +435,7 @@ impl Section {
 
         let mut failed: Vec<File> = vec![];
 
-        let mut childs: HashMap<&File, Child> = HashMap::new();
+        let mut children: HashMap<&File, Child> = HashMap::new();
 
         let mut handle_child = |child: &mut Child, file: &File| -> bool {
             let file = file.clone();
@@ -491,10 +491,10 @@ impl Section {
                     .iter()
                     .map(|str| format!("-I{}", str));
 
-                while childs.len() >= 8 {
-                    childs.retain(|file, child| handle_child(child, *file));
+                while children.len() >= 8 {
+                    children.retain(|file, child| handle_child(child, *file));
                 }
-                childs.insert(
+                children.insert(
                     &for_build,
                     std::process::Command::new(&profile.compiler)
                         .arg("-c")
@@ -512,8 +512,8 @@ impl Section {
                 built.push(&for_build);
             });
         }
-        while childs.len() > 0 {
-            childs.retain(|file, child| handle_child(child, *file));
+        while children.len() > 0 {
+            children.retain(|file, child| handle_child(child, *file));
         }
 
         for (dep, srcs) in &self.deps_src {
