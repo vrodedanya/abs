@@ -1,0 +1,15 @@
+[tank]
+name = "linking_local_library"
+version = "0.1.0"
+
+[sections.library]
+type = "library"
+source = "library/source"
+include = "library/include"
+
+[sections.main]
+source = "source"
+include = "source"
+pipes = [
+    "sections.library"
+]
