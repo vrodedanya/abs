@@ -24,6 +24,6 @@ jobs:
       - name: functional
         run: |
           cargo build
-          cd test
+          cd tests
           ./run.sh
 
