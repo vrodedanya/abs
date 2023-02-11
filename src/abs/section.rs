@@ -13,6 +13,7 @@ pub enum SectionError {
 #[derive(Debug)]
 pub struct Section {
     pub name: String,
+    pub output_type: String, 
     files: Vec<File>,
     include_directories: Vec<String>,
     deps_src: HashMap<File, Vec<File>>,
@@ -42,6 +43,21 @@ impl Section {
 
         let include_dir = config.get("include");
 
+        let output_type = match config.get("type") {
+            Some(value) => {
+                if value.is_str() {
+                    value.as_str().unwrap().to_string()
+                } else {
+                    println!(
+                        "{:>RESULT_BORDER_WIDTH$}",
+                        "Expected string for 'type'".red().bold()
+                    );
+                    std::process::exit(1);
+                }
+            },
+            None => "executable".to_string(),
+        };
+
         let mut include_directories = Section::collect_default_includes();
         include_directories.push(source_dir.to_string());
 
@@ -66,6 +82,7 @@ impl Section {
 
         Ok(Section {
             name,
+            output_type,
             files: section_files,
             include_directories,
             deps_src,
@@ -358,27 +375,37 @@ impl Section {
                 })
                 .collect();
         // linking
-        let mut child = std::process::Command::new(&profile.compiler)
-            .args(&profile.linking_directories)
-            .args(&profile.linking_options)
-            .args(objects)
-            .arg("-o")
-            .arg(format!(
-                ".abs/{}/{}/binary/{}",
-                self.name, profile.name, self.name
-            ))
-            .spawn()
-            .unwrap();
+        if (self.output_type == "executable") {
+            let mut child = std::process::Command::new(&profile.compiler)
+                .args(&profile.linking_directories)
+                .args(&profile.linking_options)
+                .args(objects)
+                .arg("-o")
+                .arg(format!(
+                    ".abs/{}/{}/{}",
+                    self.name, profile.name, self.name
+                ))
+                .spawn()
+                .unwrap();
 
-        match child.wait() {
-            Ok(exit_status) => {
-                if exit_status.success() {
-                    println!(
-                        "{:>RESULT_BORDER_WIDTH$} {}",
-                        "Complete".green().bold(),
-                        "linking".cyan()
-                    );
-                } else {
+            match child.wait() {
+                Ok(exit_status) => {
+                    if exit_status.success() {
+                        println!(
+                            "{:>RESULT_BORDER_WIDTH$} {}",
+                            "Complete executable".green().bold(),
+                            "linking".cyan()
+                        );
+                    } else {
+                        println!(
+                            "{:>RESULT_BORDER_WIDTH$} {}",
+                            "Fail".red().bold(),
+                            "linking".cyan()
+                        );
+                        return false;
+                    }
+                }
+                Err(_) => {
                     println!(
                         "{:>RESULT_BORDER_WIDTH$} {}",
                         "Fail".red().bold(),
@@ -387,13 +414,43 @@ impl Section {
                     return false;
                 }
             }
-            Err(_) => {
-                println!(
-                    "{:>RESULT_BORDER_WIDTH$} {}",
-                    "Fail".red().bold(),
-                    "linking".cyan()
-                );
-                return false;
+        } else if (self.output_type == "library") {
+            let mut child = std::process::Command::new("ar")
+                .arg("rcs")
+                .arg("-o")
+                .arg(format!(
+                    ".abs/{}/{}/lib{}.a",
+                    self.name, profile.name, self.name
+                ))
+                .args(objects)
+                .spawn()
+                .unwrap();
+
+            match child.wait() {
+                Ok(exit_status) => {
+                    if exit_status.success() {
+                        println!(
+                            "{:>RESULT_BORDER_WIDTH$} {}",
+                            "Complete static library".green().bold(),
+                            "linking".cyan()
+                        );
+                    } else {
+                        println!(
+                            "{:>RESULT_BORDER_WIDTH$} {}",
+                            "Fail".red().bold(),
+                            "linking".cyan()
+                        );
+                        return false;
+                    }
+                }
+                Err(_) => {
+                    println!(
+                        "{:>RESULT_BORDER_WIDTH$} {}",
+                        "Fail".red().bold(),
+                        "linking".cyan()
+                    );
+                    return false;
+                }
             }
         }
         return true;
@@ -560,7 +617,7 @@ impl Section {
             profile.name
         );
         let mut child = std::process::Command::new(format!(
-            ".abs/{}/{}/binary/{}",
+            ".abs/{}/{}/{}",
             self.name, profile.name, self.name
         ))
         .spawn()

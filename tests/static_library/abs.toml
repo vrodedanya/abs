@@ -1,0 +1,8 @@
+[tank]
+name = "static_library"
+version = "0.1.0"
+
+[sections.main]
+type = "library"
+source = "source"
+include = "include"
