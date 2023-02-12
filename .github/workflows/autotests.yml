@@ -14,7 +14,7 @@ env:
   BUILD_TYPE: Develop
 
 jobs:
-  build:
+  autotests:
     runs-on: ubuntu-latest
 
     steps:
