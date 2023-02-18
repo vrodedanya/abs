@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use super::profile::Profile;
 
+#[derive(Debug)]
 #[derive(Clone)]
 #[allow(unused)]
 pub struct ProfilesManager {
@@ -37,9 +38,9 @@ impl ProfilesManager {
             "-Winline",
             "-Wredundant-decls",
         ]
-        .iter()
-        .map(ToString::to_string)
-        .collect();
+            .iter()
+            .map(ToString::to_string)
+            .collect();
 
         let mut default_profiles: HashMap<String, Profile> = HashMap::new();
 
@@ -82,15 +83,15 @@ impl ProfilesManager {
         let mut debug_asan_profile = Profile::empty("debug-asan");
         debug_asan_profile.compiler = "g++".to_string();
         debug_asan_profile.standard = "-std=c++17".to_string();
-        debug_asan_profile
-            .linking_options
-            .push("-fsanitize=address".to_string());
-        debug_asan_profile
-            .linking_options
-            .push("-fsanitize=undefined".to_string());
-        debug_asan_profile
-            .linking_options
-            .push("-fsanitize=leak".to_string());
+        debug_asan_profile.linking_options = vec![
+            "-fsanitize=address",
+            "-fsanitize=undefined",
+            "-fsanitize=leak"
+        ]
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+
         debug_asan_profile.options = vec![
             "-O0",
             "-g3",
@@ -99,10 +100,10 @@ impl ProfilesManager {
             "-fsanitize=undefined",
             "-fsanitize=leak",
         ]
-        .iter()
-        .map(ToString::to_string)
-        .chain(default_flags.clone())
-        .collect();
+            .iter()
+            .map(ToString::to_string)
+            .chain(default_flags.clone())
+            .collect();
 
         let mut debug_tsan_profile = Profile::empty("debug-tsan");
         debug_tsan_profile.compiler = "g++".to_string();

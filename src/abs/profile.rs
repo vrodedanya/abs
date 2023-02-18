@@ -6,6 +6,7 @@ pub enum ProfileError {
 }
 
 #[derive(Clone)]
+#[derive(Debug)]
 #[allow(unused)]
 pub struct Profile {
     pub name: String,
@@ -164,6 +165,7 @@ impl Profile {
         }
         return Ok(profile);
     }
+    
     pub fn fill_from_config(&mut self, config: &toml::Value) -> Result<(), ProfileError> {
         if let Some(compiler) = config.get("compiler") {
             self.compiler = compiler

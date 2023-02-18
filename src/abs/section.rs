@@ -1,7 +1,8 @@
 use super::{file::File, profile::Profile};
 use chrono::NaiveDateTime;
 use colored::Colorize;
-use std::{collections::HashMap, io::Read, process::Child};
+use std::{collections::HashMap, io::Read, process::Child, rc::Weak, cell::RefCell};
+use super::tank::Tank;
 
 #[derive(Debug)]
 pub enum SectionError {
@@ -13,7 +14,8 @@ pub enum SectionError {
 #[derive(Debug)]
 pub struct Section {
     pub name: String,
-    pub output_type: String, 
+    pub output_type: String,
+    pipes: Vec<Weak<RefCell<Section>>>,
     files: Vec<File>,
     include_directories: Vec<String>,
     deps_src: HashMap<File, Vec<File>>,
@@ -24,7 +26,7 @@ const RESULT_BORDER_WIDTH: usize = 10;
 
 #[allow(unused)]
 impl Section {
-    pub fn new(name: String, config: &toml::Value) -> Result<Section, SectionError> {
+    pub fn new(tank: &Tank, name: String, config: &toml::Value) -> Result<Section, SectionError> {
         std::fs::create_dir_all(format!(".abs/{}", name));
 
         let mut section_files: Vec<File> = vec![];
@@ -80,9 +82,44 @@ impl Section {
         let srcs_dep =
             Section::create_map_source_dependencies(&section_files, &include_directories);
 
+        let pipes = match config.get("pipes") {
+            Some(value) =>  {
+                if value.is_array() {
+                    return Err(SectionError::FieldTypeError("pipes must be an array".to_string()));
+                }
+                value.as_array().unwrap()
+                    .iter()
+                    .map(|elem| {
+                        if elem.is_str() {
+                            let name = elem.as_str().unwrap().split(".").collect::<Vec<&str>>()[1];
+
+                            return Weak::clone(tank.get_sections()
+                                .iter()
+                                .find(|section| {
+                                    let section = match section.upgrade() {
+                                        Some(ptr) => ptr,
+                                        None => todo!(),
+                                    };
+                                    let section = section.borrow_mut();
+
+                                    return section.name == name;
+                            }).unwrap());
+                        } else {
+                            println!(
+                                "{:>RESULT_BORDER_WIDTH$}",
+                                " Wrong type for pipe".bright_red()
+                            );
+                            std::process::exit(1);
+                        }})
+                    .collect()
+            },
+            None => vec![],
+        };
+
         Ok(Section {
             name,
             output_type,
+            pipes,
             files: section_files,
             include_directories,
             deps_src,
@@ -623,5 +660,17 @@ impl Section {
         .spawn()
         .unwrap();
         return true;
+    }
+
+    pub fn get_output(&self, profile: &Profile) -> String {
+        if self.output_type == "executable" {
+            format!(
+                ".abs/{}/{}/{}",
+                self.name, profile.name, self.name)
+        } else {
+            format!(
+                ".abs/{}/{}/lib{}.a",
+                self.name, profile.name, self.name)
+        }
     }
 }

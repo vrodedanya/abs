@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::fs;
+use std::rc::{Rc, Weak};
 
 use super::profiles_manager::ProfilesManager;
 use super::section::Section;
@@ -12,12 +14,13 @@ pub enum TankError {
     SectionError(String),
 }
 
+#[derive(Debug)]
 #[allow(unused)]
 pub struct Tank {
     name: String,
     config: toml::Value,
     version: String, // todo Probably semver type?
-    sections: Vec<Section>,
+    sections: Vec<Rc<RefCell<Section>>>,
 
     profiles_manager: ProfilesManager,
 }
@@ -44,22 +47,7 @@ impl Tank {
             .get("version")
             .ok_or_else(|| TankError::MandatoryLack("Can't find version of tank".to_string()))?;
 
-        let mut sections_config = config.get_mut("sections");
-
-        let mut sections: Vec<Section> = vec![];
-
-        if let Some(sections_config) = sections_config {
-            if let toml::Value::Table(t) = sections_config {
-                for (key, value) in t {
-                    sections.push(
-                        Section::new(key.to_string(), &value)
-                            .map_err(|err| TankError::SectionError(format!("{:#?}", err)))?,
-                    );
-                }
-            }
-        }
-
-        let tank = Tank {
+        let mut tank = Tank {
             name: name_of_tank
                 .as_str()
                 .ok_or_else(|| TankError::WrongTypeOfField("Can't find name of tank".to_string()))?
@@ -71,24 +59,50 @@ impl Tank {
                     TankError::WrongTypeOfField("Can't find version of tank".to_string())
                 })?
                 .to_string(),
-            sections,
+            sections: vec![],
             profiles_manager: ProfilesManager::new(config.get("profiles")),
         };
+
+        let mut sections_config = config.get_mut("sections");
+
+        let mut sections: Vec<Rc<RefCell<Section>>> = vec![];
+        if let Some(sections_config) = sections_config {
+            if let toml::Value::Table(t) = sections_config {
+                for (key, value) in t {
+                    sections.push(Rc::new(RefCell::new(
+                        Section::new(&tank, key.to_string(), &value)
+                            .map_err(|err| TankError::SectionError(format!("{:#?}", err)))?,
+                    )));
+                }
+            }
+        }
+        tank.sections = sections;
+
         return Ok(tank);
     }
 
     pub fn check(&self, profile_name: &str) -> bool {
         if let Some(profile) = self.profiles_manager.get(profile_name) {
-            self.sections.iter().all(|section| section.check(profile))
+            self.sections.iter().all(|section| {
+                let section = section.borrow_mut();
+                section.check(profile)
+            })
         } else {
             println!("'{}' doesn't exist", profile_name);
             return false;
         }
     }
 
+    pub fn get_sections(&self) -> Vec<Weak<RefCell<Section>>> {
+        self.sections.iter().map(|elem|Rc::<RefCell<Section>>::downgrade(elem)).collect()
+    }
+
     pub fn build(&self, profile_name: &str) -> bool {
         if let Some(profile) = self.profiles_manager.get(profile_name) {
-            self.sections.iter().all(|section| section.build(profile))
+            self.sections.iter().all(|section| {
+                let section = section.borrow_mut();
+                section.build(profile)
+            })
         } else {
             println!("'{}' doesn't exist", profile_name);
             return false;
@@ -97,7 +111,10 @@ impl Tank {
 
     pub fn run(&self, profile_name: &str) -> bool {
         if let Some(profile) = self.profiles_manager.get(profile_name) {
-            self.sections.iter().all(|section| section.run(profile))
+            self.sections.iter().all(|section| {
+                let section = section.borrow_mut();
+                section.run(profile)
+            })
         } else {
             println!("'{}' doesn't exist", profile_name);
             return false;
