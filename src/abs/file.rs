@@ -1,6 +1,6 @@
 use chrono::NaiveDateTime;
 
-use std::{fs, path::Path};
+use std::{fs, path::Path, time::SystemTime};
 use super::profile::Profile;
 use super::dependency::Dependency;
 use super::section::RESULT_BORDER_WIDTH;
@@ -32,9 +32,9 @@ impl File {
 
     pub fn from_system_time(
         path: String,
-        last_modification: std::time::SystemTime,
+        last_modification: SystemTime,
     ) -> Result<File, FileError> {
-        let binding = std::path::Path::new(&path)
+        let binding = Path::new(&path)
             .canonicalize()
             .map_err(|err| FileError::FileDoesntExist("Can't get absolute path".to_string()))?;
         let path = binding
@@ -58,22 +58,21 @@ impl File {
 
     pub fn encode_path(path: &str) -> String {
         let mut result = String::new();
-        let mut temp = path.clone();
+        let mut temp = path;
         loop {
-            let distance = temp.find('/');
-            if distance.is_none() {
+            if let Some(distance) = temp.find('/') {
+                result += &distance.to_string();
+                if distance != 0 {
+                    result += &temp[0..distance];
+                }
+                temp = &temp[(distance + 1)..];
+            } else {
                 if !temp.is_empty() {
                     result += &temp.len().to_string();
                     result += &temp;
                 }
                 break;
             }
-            let distance = distance.unwrap();
-            result += &distance.to_string();
-            if distance != 0 {
-                result += &temp[0..distance];
-            }
-            temp = &temp[distance + 1..];
         }
         return result;
     }
@@ -105,8 +104,7 @@ impl File {
     pub fn collect_dependencies(&self, search_list: &[String]) -> Vec<File> {
         let temp = Path::new(&self.path).canonicalize().unwrap();
         let path_to_file = temp.parent().unwrap().to_str().unwrap();
-        let mut search_list = search_list.to_vec();
-        search_list.push(path_to_file.to_string());
+        let search_list: Vec<String> = search_list.to_vec().into_iter().chain(vec![path_to_file.to_string()]).collect();
 
         let file = fs::File::open(&self.path).unwrap();
         let reader = std::io::BufReader::new(file);

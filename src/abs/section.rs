@@ -54,14 +54,12 @@ impl Section {
                 include_dir,
                 [".hpp", ".cpp", ".h", ".c"],
             ));
+            include_directories.push(include_dir.to_string());        }
 
-            include_directories.push(include_dir.to_string());
-        }
-
-        let mut output_type;
+        let mut output_type = String::from("executable");
         if let Some(value) = config.get("type") {
             if value.is_str() {
-                output_type = value.as_str().unwrap().to_string();
+                output_type = value.as_str().unwrap().to_string(); // todo check correct type
             } else {
                 println!(
                     "{:>RESULT_BORDER_WIDTH$}",
@@ -69,21 +67,18 @@ impl Section {
                 );
                 std::process::exit(1);
             }
-        } else {
-            output_type = String::from("executable");
         }
 
         let deps_src = 
             Section::create_map_dependency_sources(&section_files, &include_directories);
         let srcs_dep =
             Section::create_map_source_dependencies(&section_files, &include_directories);
-
-        let pipes = match config.get("pipes") {
-            Some(value) =>  {
-                if value.is_array() {
-                    return Err(SectionError::FieldTypeError("pipes must be an array".to_string()));
-                }
-                value.as_array().unwrap()
+    
+        let mut pipes = vec![];
+        if let Some(value) = config.get("pipes") {
+            if let Some(value ) = value.as_array()
+            {
+                pipes = value
                     .iter()
                     .map(|elem| {
                         if elem.is_str() {
@@ -92,25 +87,26 @@ impl Section {
                             return Weak::clone(tank.get_sections()
                                 .iter()
                                 .find(|section| {
-                                    let section = match section.upgrade() {
-                                        Some(ptr) => ptr,
-                                        None => todo!(),
-                                    };
-                                    let section = section.borrow_mut();
-
-                                    return section.name == name;
-                            }).unwrap());
+                                    if let Some(section) = section.upgrade() {
+                                        let section = section.borrow_mut();
+                                        return section.name == name;
+                                    } else {
+                                        return false;
+                                    }
+                                })
+                                .unwrap()); // todo doesn't exist case
                         } else {
                             println!(
-                                "{:>RESULT_BORDER_WIDTH$}",
-                                " Wrong type for pipe".bright_red()
-                            );
-                            std::process::exit(1);
-                        }})
+                            "{:>RESULT_BORDER_WIDTH$}",
+                            " Wrong type for pipe".bright_red()
+                        );
+                        std::process::exit(1);
+                    }})
                     .collect()
-            },
-            None => vec![],
-        };
+            } else {
+                return Err(SectionError::FieldTypeError("pipes must be an array".to_string()));
+            }
+        }
 
         Ok(Section {
             name,
