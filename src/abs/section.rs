@@ -22,14 +22,12 @@ pub struct Section {
     srcs_dep: HashMap<File, Vec<File>>,
 }
 
-const RESULT_BORDER_WIDTH: usize = 10;
+pub const RESULT_BORDER_WIDTH: usize = 10;
 
 #[allow(unused)]
 impl Section {
     pub fn new(tank: &Tank, name: String, config: &toml::Value) -> Result<Section, SectionError> {
         std::fs::create_dir_all(format!(".abs/{}", name));
-
-        let mut section_files: Vec<File> = vec![];
 
         let source_dir = config
             .get("source")
@@ -41,31 +39,13 @@ impl Section {
                 "'source' is string type!".to_string(),
             ))?;
 
-        section_files = Section::collect_files(source_dir, [".hpp", ".cpp", ".h", ".c"]);
-
-        let include_dir = config.get("include");
-
-        let output_type = match config.get("type") {
-            Some(value) => {
-                if value.is_str() {
-                    value.as_str().unwrap().to_string()
-                } else {
-                    println!(
-                        "{:>RESULT_BORDER_WIDTH$}",
-                        "Expected string for 'type'".red().bold()
-                    );
-                    std::process::exit(1);
-                }
-            },
-            None => "executable".to_string(),
-        };
+        let mut section_files = Section::collect_files(source_dir, [".hpp", ".cpp", ".h", ".c"]);
 
         let mut include_directories = Section::collect_default_includes();
         include_directories.push(source_dir.to_string());
 
-        if include_dir.is_some() {
+        if let Some(include_dir) = config.get("include") {
             let include_dir = include_dir
-                .unwrap()
                 .as_str()
                 .ok_or(SectionError::FieldTypeError(
                     "'source' is string type!".to_string(),
@@ -78,7 +58,23 @@ impl Section {
             include_directories.push(include_dir.to_string());
         }
 
-        let deps_src = Section::create_map_dependency_sources(&section_files, &include_directories);
+        let mut output_type;
+        if let Some(value) = config.get("type") {
+            if value.is_str() {
+                output_type = value.as_str().unwrap().to_string();
+            } else {
+                println!(
+                    "{:>RESULT_BORDER_WIDTH$}",
+                    "Expected string for 'type'".red().bold()
+                );
+                std::process::exit(1);
+            }
+        } else {
+            output_type = String::from("executable");
+        }
+
+        let deps_src = 
+            Section::create_map_dependency_sources(&section_files, &include_directories);
         let srcs_dep =
             Section::create_map_source_dependencies(&section_files, &include_directories);
 
@@ -159,53 +155,6 @@ impl Section {
         includes
     }
 
-    fn is_dependency_exist(dependency: &str, directory: &str) -> bool {
-        return std::path::Path::new(&format!("{}/{}", directory, dependency)).exists();
-    }
-
-    fn get_dependency_path(dependency: &str, directories: &[String]) -> Option<File> {
-        for dir in directories {
-            if Section::is_dependency_exist(dependency, dir) {
-                let dependency_path = format!("{}/{}", dir, dependency);
-                return Some(File::from_path(dependency_path).unwrap());
-            }
-        }
-        return None;
-    }
-
-    fn collect_local_dependencies_for_file(path: &str, search_list: &[String]) -> Vec<File> {
-        let temp = std::path::Path::new(path).canonicalize().unwrap();
-        let path_to_file = temp.parent().unwrap().to_str().unwrap();
-
-        let file = std::fs::File::open(path).unwrap();
-        let reader = std::io::BufReader::new(file);
-
-        std::io::BufRead::lines(reader)
-            .map(|line| line.unwrap())
-            .filter(|line| line.starts_with("#include"))
-            .map(|line| {
-                let stripped = line.strip_prefix("#include ").unwrap().trim();
-                let name: String = stripped[1..stripped.len() - 1].to_string();
-                // check local
-                if Section::is_dependency_exist(&name, path_to_file) {
-                    let path = format!("{}/{}", path_to_file, name);
-                    return File::from_path(path).unwrap();
-                }
-                // check specialized paths
-                if let Some(val) = Section::get_dependency_path(&name, search_list) {
-                    return val;
-                } else {
-                    println!(
-                        "{:>RESULT_BORDER_WIDTH$} {}",
-                        "Failed to find ".bright_red(),
-                        name
-                    );
-                    std::process::exit(1);
-                }
-            })
-            .collect()
-    }
-
     fn create_map_source_dependencies(
         paths: &Vec<File>,
         search_list: &Vec<String>,
@@ -214,7 +163,7 @@ impl Section {
         for path in paths {
             map.insert(
                 path.to_owned(),
-                Section::collect_local_dependencies_for_file(&path.path(), &search_list)
+                path.collect_dependencies(search_list)
                     .into_iter()
                     .chain(vec![path.to_owned()].into_iter())
                     .collect(),
@@ -309,9 +258,9 @@ impl Section {
 
         for modified_file in &modified {
             for for_build in &self.deps_src[modified_file] {
-                if built.contains(&for_build.path())
-                    || for_build.path().ends_with(".hpp")
-                    || for_build.path().ends_with(".h")
+                if built.contains(&for_build.path)
+                    || for_build.path.ends_with(".hpp")
+                    || for_build.path.ends_with(".h")
                 {
                     continue;
                 }
@@ -326,7 +275,7 @@ impl Section {
                     .args(&profile.defines)
                     .args(included_directories_argument)
                     .arg("-fsyntax-only")
-                    .arg(&for_build.path())
+                    .arg(&for_build.path)
                     .spawn()
                     .unwrap();
 
@@ -344,20 +293,20 @@ impl Section {
                             println!(
                                 "{:>RESULT_BORDER_WIDTH$} '{}'",
                                 "Ok".green().bold(),
-                                for_build.path()
+                                for_build.path
                             );
                             compiled_number += 1;
                         } else {
                             println!(
                                 "{:>RESULT_BORDER_WIDTH$} '{}'",
                                 "Fail".red().bold(),
-                                for_build.path()
+                                for_build.path
                             );
                             if !output.is_empty() {
                                 println!("{}", output);
                             }
                             is_successful = false;
-                            built.push(for_build.path());
+                            built.push(for_build.path.clone());
                             continue;
                         }
                     }
@@ -365,14 +314,14 @@ impl Section {
                         println!(
                             "{:>RESULT_BORDER_WIDTH$} '{}'",
                             "Fail".red().bold(),
-                            for_build.path()
+                            for_build.path
                         );
                         is_successful = false;
-                        built.push(for_build.path());
+                        built.push(for_build.path.clone());
                     }
                 }
 
-                built.push(for_build.path());
+                built.push(for_build.path.clone());
             }
         }
         if !is_successful {
@@ -497,7 +446,7 @@ impl Section {
         self.files
             .iter()
             .filter(|file| {
-                if file.path().ends_with(".cpp") || file.path().ends_with(".c") {
+                if file.path.ends_with(".cpp") || file.path.ends_with(".c") {
                     let name = &file.get_object_path(&self.name, profile);
                     if !std::path::Path::new(&name).exists() {
                         return true;
@@ -551,14 +500,14 @@ impl Section {
                         println!(
                             "{:>RESULT_BORDER_WIDTH$} '{}'",
                             "Complete".green().bold(),
-                            file.path()
+                            file.path
                         );
                         self.freeze(&file, profile);
                     } else {
                         println!(
                             "{:>RESULT_BORDER_WIDTH$} '{}'",
                             "Fail".red().bold(),
-                            file.path()
+                            file.path
                         );
                         failed.push(file);
                     }
@@ -572,12 +521,12 @@ impl Section {
             let mut is_all_compiled = true;
             self.deps_src[modified_file].iter().for_each(|for_build| {
                 if built.contains(&for_build)
-                    || for_build.path().ends_with(".hpp")
-                    || for_build.path().ends_with(".h")
+                    || for_build.path.ends_with(".hpp")
+                    || for_build.path.ends_with(".h")
                 {
                     return;
                 }
-                if for_build.path() != modified_file.path()
+                if for_build.path != modified_file.path
                     && match self.get_frozen_time(&for_build, profile) {
                         // if file was frozen after changing dependency
                         Some(for_build_frozen_time) => {
@@ -600,7 +549,7 @@ impl Section {
                     &for_build,
                     std::process::Command::new(&profile.compiler)
                         .arg("-c")
-                        .arg(&for_build.path())
+                        .arg(&for_build.path)
                         .args(&profile.options)
                         .arg(&profile.standard)
                         .args(&profile.defines)

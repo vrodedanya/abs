@@ -1,6 +1,10 @@
 use chrono::NaiveDateTime;
 
+use std::{fs, path::Path};
 use super::profile::Profile;
+use super::dependency::Dependency;
+use super::section::RESULT_BORDER_WIDTH;
+use colored::Colorize;
 
 
 #[allow(unused)]
@@ -13,7 +17,7 @@ pub enum FileError {
 
 #[derive(Hash, PartialEq, PartialOrd, Eq, Debug, Clone)]
 pub struct File {
-    path: String,
+    pub path: String,
     last_modification: NaiveDateTime,
 }
 
@@ -44,16 +48,12 @@ impl File {
     }
 
     pub fn from_path(path: String) -> Result<File, FileError> {
-        let modified = std::path::Path::new(&path)
+        let modified = Path::new(&path)
             .metadata()
             .map_err(|err| FileError::CantGetMetaData(err.to_string()))?
             .modified()
             .map_err(|err| FileError::ModificationTimeUnavailable(err.to_string()))?;
         Ok(File::from_system_time(path, modified)?)
-    }
-
-    pub fn path(&self) -> String {
-        self.path.clone()
     }
 
     pub fn encode_path(path: &str) -> String {
@@ -102,6 +102,37 @@ impl File {
         )
     }
 
+    pub fn collect_dependencies(&self, search_list: &[String]) -> Vec<File> {
+        let temp = Path::new(&self.path).canonicalize().unwrap();
+        let path_to_file = temp.parent().unwrap().to_str().unwrap();
+        let mut search_list = search_list.to_vec();
+        search_list.push(path_to_file.to_string());
+
+        let file = fs::File::open(&self.path).unwrap();
+        let reader = std::io::BufReader::new(file);
+
+        std::io::BufRead::lines(reader)
+            .map(|line| line.unwrap())
+            .filter(|line| line.starts_with("#include"))
+            .map(|line| {
+                let stripped = line.strip_prefix("#include ").unwrap().trim();
+                let name = stripped[1..stripped.len() - 1].to_string();
+                let dependency = Dependency::new(name);
+
+                if let Some(val) = dependency.get_file_from_path(&search_list) {
+                    return val;
+                } else {
+                    println!(
+                        "{:>RESULT_BORDER_WIDTH$} {}",
+                        "Failed to find ".bright_red(),
+                        dependency.name
+                    );
+                    std::process::exit(1);
+                }
+            })
+            .collect()
+    }
+
     pub fn modified(&self) -> NaiveDateTime {
         self.last_modification
     }
@@ -148,4 +179,3 @@ mod tests {
         assert_eq!(f.get_freeze_path("test", &prof), ".abs/test/profile/frozen/04some4test8path.cpp");
     }
 }
-
