@@ -27,7 +27,7 @@ pub struct Tank {
 
 #[allow(unused)]
 impl Tank {
-    pub fn new(config_name: &str) -> Result<Tank, TankError> {
+    pub fn new(config_name: &str, profile_name: &str) -> Result<Tank, TankError> {
         let mut config: toml::Value = toml::from_str(
             &fs::read_to_string(config_name)
                 .map_err(|err| TankError::ConfigFileDoesntExist(err.to_string()))?,
@@ -63,6 +63,8 @@ impl Tank {
             profiles_manager: ProfilesManager::new(config.get("profiles")),
         };
 
+        let profile = tank.profiles_manager.get(profile_name).expect("Exist profile name"); // todo
+
         let mut sections_config = config.get_mut("sections");
 
         let mut sections: Vec<Rc<RefCell<Section>>> = vec![];
@@ -70,7 +72,7 @@ impl Tank {
             if let toml::Value::Table(t) = sections_config {
                 for (key, value) in t {
                     sections.push(Rc::new(RefCell::new(
-                        Section::new(&tank, key.to_string(), &value)
+                        Section::new(&tank, key.to_string(), &value, Rc::clone(&profile))
                             .map_err(|err| TankError::SectionError(format!("{:#?}", err)))?,
                     )));
                 }
@@ -81,44 +83,29 @@ impl Tank {
         return Ok(tank);
     }
 
-    pub fn check(&self, profile_name: &str) -> bool {
-        if let Some(profile) = self.profiles_manager.get(profile_name) {
+    pub fn check(&self) -> bool {
             self.sections.iter().all(|section| {
                 let section = section.borrow_mut();
-                section.check(profile)
+                section.check()
             })
-        } else {
-            println!("'{}' doesn't exist", profile_name);
-            return false;
-        }
     }
 
     pub fn get_sections(&self) -> Vec<Weak<RefCell<Section>>> {
         self.sections.iter().map(|elem|Rc::<RefCell<Section>>::downgrade(elem)).collect()
     }
 
-    pub fn build(&self, profile_name: &str) -> bool {
-        if let Some(profile) = self.profiles_manager.get(profile_name) {
-            self.sections.iter().all(|section| {
-                let section = section.borrow_mut();
-                section.build(profile)
-            })
-        } else {
-            println!("'{}' doesn't exist", profile_name);
-            return false;
-        }
+    pub fn build(&self) -> bool {
+        self.sections.iter().all(|section| {
+            let section = section.borrow_mut();
+            section.build()
+        })
     }
 
-    pub fn run(&self, profile_name: &str) -> bool {
-        if let Some(profile) = self.profiles_manager.get(profile_name) {
-            self.sections.iter().all(|section| {
-                let section = section.borrow_mut();
-                section.run(profile)
-            })
-        } else {
-            println!("'{}' doesn't exist", profile_name);
-            return false;
-        }
+    pub fn run(&self) -> bool {
+        self.sections.iter().all(|section| {
+            let section = section.borrow_mut();
+            section.run()
+        })
     }
 
     pub fn print_sections(&self) {

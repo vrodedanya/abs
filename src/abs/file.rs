@@ -56,6 +56,39 @@ impl File {
         Ok(File::from_system_time(path, modified)?)
     }
 
+    pub fn collect_files<const N: usize>(path: &str, suffixes: [&str; N]) -> Vec<File> {
+        let mut vec_of_paths = vec![];
+        for entry in std::fs::read_dir(path).unwrap() {
+            let entry = entry.unwrap();
+            let meta = entry.metadata().unwrap();
+            let abs = entry.path().canonicalize().unwrap();
+            let full_path = abs.to_str().unwrap();
+            if meta.is_dir() {
+                vec_of_paths.append(&mut File::collect_files(full_path, suffixes));
+            } else if suffixes.iter().any(|&suffix| full_path.ends_with(suffix)) {
+                vec_of_paths.push(File::from_path(full_path.to_owned()).unwrap());
+            }
+        }
+        return vec_of_paths;
+    }
+
+    fn get_frozen_time(&self, section_name: &str, profile: &Profile) -> Option<NaiveDateTime> {
+        if let Ok(f) = fs::File::open(self.get_freeze_path(section_name, profile)) {
+            let mut reader = std::io::BufReader::new(f);
+            let mut content = String::new();
+            if std::io::BufRead::read_line(&mut reader, &mut content).is_err() {
+                return None;
+            }
+            if let Ok(time) = NaiveDateTime::parse_from_str(&content, "%Y-%m-%d/%T") {
+                return Some(time);
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        }
+    }
+
     pub fn encode_path(path: &str) -> String {
         let mut result = String::new();
         let mut temp = path;
@@ -135,8 +168,12 @@ impl File {
         self.last_modification
     }
 
-    pub fn is_modified(&self, compare_time: &NaiveDateTime) -> bool {
-        self.last_modification.timestamp() > compare_time.timestamp()
+    pub fn is_modified(&self, section_name: &str, profile: &Profile) -> bool {
+        match self.get_frozen_time(section_name, profile) {
+            Some(frozen_time) => self.last_modification.timestamp() > frozen_time.timestamp(),
+            None => true,
+        }
+        
     }
 
     pub fn modification_time_to_string(&self) -> String {

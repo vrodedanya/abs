@@ -18,7 +18,6 @@ fn cli() -> Command {
                 .about("Creates new tank directory")
                 .arg(arg!(<tank_name> "name of tank").required(true)),
         )
-        .subcommand(Command::new("files").about("Shows collected files"))
         .subcommand(
             Command::new("check")
                 .about("Checks that the current section can be built")
@@ -36,8 +35,8 @@ fn cli() -> Command {
         )
 }
 
-fn get_tank() -> Tank {
-    Tank::new("abs.toml").unwrap_or_else(|err| {
+fn get_tank(profile_name: &str) -> Tank {
+    Tank::new("abs.toml", profile_name).unwrap_or_else(|err| {
         match err {
             TankError::ConfigFileDoesntExist(_) => {
                 println!("Can't find configuration file. Check it")
@@ -85,33 +84,29 @@ fn main() {
                 println!("Failed to get name of the tank");
             }
         }
-        Some(("files", _)) => {
-            let tank = get_tank();
-            tank.print_sections();
-        }
         Some(("check", matches)) => {
-            let tank = get_tank();
             let mut profile = String::from("debug");
             if let Some(input) = matches.get_one::<String>("profile") {
                 profile = input.clone();
             }
-            result = tank.check(&profile);
+            let tank = get_tank(&profile);
+            result = tank.check();
         }
         Some(("build", matches)) => {
-            let tank = get_tank();
             let mut profile = String::from("debug");
             if let Some(input) = matches.get_one::<String>("profile") {
                 profile = input.clone();
             }
-            result = tank.build(&profile);
+            let tank = get_tank(&profile);
+            result = tank.build();
         }
         Some(("run", matches)) => {
-            let tank = get_tank();
             let mut profile = String::from("debug");
             if let Some(input) = matches.get_one::<String>("profile") {
                 profile = input.clone();
             }
-            result = tank.run(&profile);
+            let tank = get_tank(&profile);
+            result = tank.run();
         }
         None => {
             println!("Unexpected command")

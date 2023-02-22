@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-
+use std::rc::Rc;
 use super::profile::Profile;
 
 #[derive(Debug)]
 #[derive(Clone)]
 #[allow(unused)]
 pub struct ProfilesManager {
-    profiles: HashMap<String, Profile>,
+    profiles: HashMap<String, Rc<Profile>>,
 }
 
 #[allow(unused)]
@@ -42,7 +42,7 @@ impl ProfilesManager {
             .map(ToString::to_string)
             .collect();
 
-        let mut default_profiles: HashMap<String, Profile> = HashMap::new();
+        let mut default_profiles: HashMap<String, Rc<Profile>> = HashMap::new();
 
         let mut release_profile = Profile::empty("release");
         release_profile.compiler = "g++".to_string();
@@ -120,43 +120,43 @@ impl ProfilesManager {
         if let Some(config) = config {
             if let toml::Value::Table(t) = config {
                 for (key, value) in t {
-                    if key == "release" {
-                        release_profile.fill_from_config(value);
-                    } else if key == "debug" {
-                        debug_profile.fill_from_config(value);
-                    } else if key == "release-unsafe" {
-                        release_unsafe_profile.fill_from_config(value);
-                    } else if key == "debug-unsafe" {
-                        debug_unsafe_profile.fill_from_config(value);
-                    } else if key == "debug-asan" {
-                        debug_asan_profile.fill_from_config(value);
-                    } else if key == "debug-tsan" {
-                        debug_tsan_profile.fill_from_config(value);
-                    } else {
-                        match Profile::from_config(key, value) {
-                            Ok(profile) => {
-                                default_profiles.insert(key.to_string(), profile);
-                            }
-                            Err(error) => println!("Can't add {}: {:?}", key, error),
-                        };
-                    }
+                    match key.as_str() {
+                        "release" => release_profile.fill_from_config(value),
+                        "debug" => debug_profile.fill_from_config(value),
+                        "release-unsafe" => release_unsafe_profile.fill_from_config(value),
+                        "debug-unsafe" => debug_unsafe_profile.fill_from_config(value),
+                        "debug-asan" => debug_asan_profile.fill_from_config(value),
+                        "debug-tsan" => debug_tsan_profile.fill_from_config(value),
+                        _ => continue
+                    };
+                    match Profile::from_config(key, value) {
+                        Ok(profile) => {
+                            default_profiles.insert(key.to_string(), Rc::new(profile));
+                            ()
+                        }
+                        Err(error) => println!("Can't add {}: {:?}", key, error)
+                    };
                 }
             }
         }
 
-        default_profiles.insert(String::from("release"), release_profile);
-        default_profiles.insert(String::from("debug"), debug_profile);
-        default_profiles.insert(String::from("release-unsafe"), release_unsafe_profile);
-        default_profiles.insert(String::from("debug-unsafe"), debug_unsafe_profile);
-        default_profiles.insert(String::from("debug-asan"), debug_asan_profile);
-        default_profiles.insert(String::from("debug-tsan"), debug_tsan_profile);
+        default_profiles.insert(String::from("release"), Rc::new(release_profile));
+        default_profiles.insert(String::from("debug"), Rc::new(debug_profile));
+        default_profiles.insert(String::from("release-unsafe"), Rc::new(release_unsafe_profile));
+        default_profiles.insert(String::from("debug-unsafe"), Rc::new(debug_unsafe_profile));
+        default_profiles.insert(String::from("debug-asan"), Rc::new(debug_asan_profile));
+        default_profiles.insert(String::from("debug-tsan"), Rc::new(debug_tsan_profile));
 
         ProfilesManager {
             profiles: default_profiles,
         }
     }
 
-    pub fn get(&self, profile_name: &str) -> Option<&Profile> {
-        self.profiles.get(profile_name)
+    pub fn get(&self, profile_name: &str) -> Option<Rc<Profile>> {
+        if let Some(profile) = self.profiles.get(profile_name) {
+            Some(Rc::clone(profile))
+        } else {
+            None
+        }
     }
 }
