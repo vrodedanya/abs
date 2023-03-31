@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
-ABS_PATH:=../target/debug/abs
-PROFILE:=debug
+ABS_PATH=../target/debug/abs
+PROFILE=debug
 
 IS_FAILED=false
 
@@ -10,10 +10,10 @@ for d in */ ; do
     cd $d
     ../$ABS_PATH build -p $PROFILE
     if [[ "$?" != "0" ]]; then
-        echo "========Failed $d========"
+        echo "======== Failed $d ========"
         IS_FAILED=true
     else
-        echo "========Done $d========"
+        echo "======== Done $d ========"
     fi
     cd ..
 done

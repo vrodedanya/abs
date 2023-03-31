@@ -14,11 +14,11 @@ impl Dependency {
         Path::new(&format!("{}/{}", path, self.name)).exists()
     }
 
-    pub fn get_file_from_path(&self, directories: &[String]) -> Option<File> {
-        for dir in directories {
+    pub fn get_file_from_path(&self, directories_for_search: &[String]) -> Option<File> {
+        for dir in directories_for_search {
             if self.is_exist_in(dir) {
                 let dependency_path = format!("{}/{}", dir, self.name);
-                return Some(File::from_path(dependency_path).unwrap());
+                return Some(File::new(&dependency_path).unwrap());
             }
         }
         return None;
