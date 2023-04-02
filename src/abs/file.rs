@@ -1,7 +1,6 @@
 use chrono::NaiveDateTime;
 
 use std::{fs, path::Path};
-use super::profile::Profile;
 use super::dependency::Dependency;
 use super::section::RESULT_BORDER_WIDTH;
 use colored::Colorize;
@@ -13,6 +12,7 @@ pub enum FileError {
     CantGetMetadata(String),
     ModificationTimeUnavailable(String),
     FileDoesntExist(String),
+    WrongPostfix(String)
 }
 
 #[derive(Hash, PartialEq, PartialOrd, Eq, Debug, Clone)]
@@ -41,46 +41,38 @@ impl File {
         })
     }
 
-    fn get_frozen_time(&self, section_name: &str, profile: &Profile) -> Option<NaiveDateTime> {
-        if let Ok(f) = fs::File::open(self.get_freeze_path(section_name, profile)) {
-            let mut reader = std::io::BufReader::new(f);
-            let mut content = String::new();
-            if std::io::BufRead::read_line(&mut reader, &mut content).is_err() {
-                return None;
-            }
-            if let Ok(time) = NaiveDateTime::parse_from_str(&content, "%Y-%m-%d/%T") {
-                return Some(time);
-            } else {
-                return None;
-            }
+    fn get_frozen_time_in(&self, subdirectory: &str) -> Option<NaiveDateTime> {
+        let f = fs::File::open(self.get_freeze_path_in(subdirectory));
+        if f.is_err() {
+            return None;
+        }
+        let f = f.unwrap();
+        let mut reader = std::io::BufReader::new(f);
+        let mut content = String::new();
+        if std::io::BufRead::read_line(&mut reader, &mut content).is_err() {
+            return None;
+        }
+        if let Ok(time) = NaiveDateTime::parse_from_str(&content, "%Y-%m-%d/%T") {
+            return Some(time);
         } else {
             return None;
         }
     }
 
-
-    pub fn get_object_path(&self, section_name: &str, profile: &Profile) -> String {
-        // todo return error
+    pub fn get_object_path_in(&self, subdirectory: &str) -> Result<String, FileError> {
         let without_extension = self.path
             .strip_suffix(".cpp")
             .or_else(|| self.path.strip_suffix(".c"))
-            .expect("Expected cpp or c file");
+            .ok_or(FileError::WrongPostfix("Neither C nor C++".to_string()))?;
 
-        format!(
-            ".abs/{}/{}/binary/{}",
-            section_name,
-            profile.name, 
-            File::encode_path(&format!("{}{}", without_extension, ".o"))
-        )
+        let file = File::encode_path(without_extension);
+
+        Ok(format!(".abs/{subdirectory}/binary/{file}.o"))
     }
 
-    pub fn get_freeze_path(&self, section_name: &str, profile: &Profile) -> String {
-        format!(
-            ".abs/{}/{}/frozen/{}",
-            section_name,
-            profile.name,
-            File::encode_path(&self.path)
-        )
+    pub fn get_freeze_path_in(&self, subdirectory: &str) -> String {
+        let encoded_file = File::encode_path(&self.path);
+        format!(".abs/{subdirectory}/frozen/{encoded_file}.frozen")
     }
 
     pub fn collect_dependencies(&self, search_list: &[String]) -> Vec<File> {
@@ -113,16 +105,11 @@ impl File {
             .collect()
     }
 
-    pub fn modified(&self) -> NaiveDateTime {
-        self.last_modification
-    }
-
-    pub fn is_modified(&self, section_name: &str, profile: &Profile) -> bool {
-        match self.get_frozen_time(section_name, profile) {
+    pub fn is_modified_in(&self, subdirectory: &str) -> bool {
+        match self.get_frozen_time_in(subdirectory) {
             Some(frozen_time) => self.last_modification.timestamp() > frozen_time.timestamp(),
             None => true,
         }
-        
     }
 
     pub fn modification_time_to_string(&self) -> String {
@@ -171,8 +158,6 @@ impl File {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
-
     use super::*;
     #[test]
     fn encoding_path() {

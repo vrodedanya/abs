@@ -1,7 +1,6 @@
 use super::{file::File, profile::Profile};
-use chrono::NaiveDateTime;
 use colored::Colorize;
-use std::{collections::HashMap, io::Read, process::Child, rc::Rc, rc::Weak, cell::RefCell, path::Path, fmt::format};
+use std::{collections::HashMap, io::Read, process::Child, rc::Rc, rc::Weak, cell::RefCell, path::Path};
 use super::tank::Tank;
 
 #[derive(Debug)]
@@ -175,16 +174,15 @@ impl Section {
 
     fn get_modified(&self, files: &Vec<File>) -> Vec<File> {
         let mut files = files.clone();
-        files.retain(|file| file.is_modified(&self.name, &self.profile));
+        files.retain(|file| file.is_modified_in(&format!("{}/{}", &self.name, &self.profile.name)));
         return files;
     }
 
     fn freeze(&self, file: &File) {
         std::fs::create_dir_all(self.get_frozen_path());
-        let f = std::fs::File::create(file.get_freeze_path(&self.name, &self.profile))
+        let f = std::fs::File::create(file.get_freeze_path_in(&format!("{}/{}", &self.name, &self.profile.name)))
             .expect("Unable to create file");
         let mut f = std::io::BufWriter::new(f);
-        let file_changed = file.modified().format("%Y-%m-%d/%T").to_string();
         let now = chrono::Local::now()
             .naive_local()
             .format("%Y-%m-%d/%T")
@@ -433,12 +431,11 @@ impl Section {
         self.files
             .iter()
             .filter(|file| {
-                if file.path.ends_with(".cpp") || file.path.ends_with(".c") {
-                    let name = &file.get_object_path(&self.name, &self.profile);
+                if let Ok(name) = &file.get_object_path_in(&format!("{}/{}", &self.name, &self.profile.name)) {
                     if !Path::new(&name).exists() {
                         return true;
                     }
-                }
+                } 
                 return false;
             })
             .map(|file| file.clone())
@@ -499,13 +496,17 @@ impl Section {
         for modified_file in &modified {
             let mut is_all_compiled = true;
             self.sources_of_dependency[modified_file].iter().for_each(|for_build| {
+
+                let object_path = for_build.get_object_path_in(&format!("{}/{}", &self.name, &self.profile.name));
                 if built.contains(&for_build)
                     || for_build.path.ends_with(".hpp")
-                    || for_build.path.ends_with(".h") {
+                    || for_build.path.ends_with(".h") 
+                    || object_path.is_err() {
                     return;
                 }
+                let object_path = object_path.unwrap();
                 if for_build.path != modified_file.path
-                    && for_build.is_modified(&self.name, &self.profile) {
+                    && for_build.is_modified_in(&format!("{}/{}", &self.name, &self.profile.name)) {
                     return;
                 }
                 let included_directories_argument = self
@@ -526,7 +527,7 @@ impl Section {
                         .args(&self.profile.defines)
                         .args(included_directories_argument)
                         .arg("-o")
-                        .arg(&for_build.get_object_path(&self.name, &self.profile))
+                        .arg(object_path)
                         .spawn()
                         .unwrap(),
                 );
